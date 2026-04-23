@@ -1,0 +1,6 @@
+apiVersion: v2
+name: podinfo
+description: Podinfo demo app wrapped as an Argo Rollouts canary
+type: application
+version: 0.1.0
+appVersion: "6.11.2"

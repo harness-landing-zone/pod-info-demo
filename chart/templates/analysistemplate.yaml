@@ -1,0 +1,35 @@
+{{- if .Values.analysis.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "podinfo.fullname" . }}-canary-analysis
+  labels:
+    {{- include "podinfo.labels" . | nindent 4 }}
+spec:
+  metrics:
+    - name: success-rate
+      interval: 30s
+      count: 5
+      successCondition: "result[0] <= {{ .Values.analysis.errorRateThreshold }}"
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: {{ .Values.analysis.prometheusAddress }}
+          query: |
+            sum(rate(http_requests_total{app="{{ include "podinfo.name" . }}",status=~"5.."}[2m]))
+            /
+            clamp_min(sum(rate(http_requests_total{app="{{ include "podinfo.name" . }}"}[2m])), 1)
+    - name: latency-p99
+      interval: 30s
+      count: 5
+      successCondition: "result[0] < {{ .Values.analysis.latencyP99Ms }}"
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: {{ .Values.analysis.prometheusAddress }}
+          query: |
+            1000 * histogram_quantile(
+              0.99,
+              sum(rate(http_request_duration_seconds_bucket{app="{{ include "podinfo.name" . }}"}[2m])) by (le)
+            )
+{{- end }}

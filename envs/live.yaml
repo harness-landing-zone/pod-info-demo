@@ -1,0 +1,26 @@
+# Live (k3d-live). Slow canary, pipeline-gated — simulates prod.
+
+image:
+  tag: "6.11.2"
+
+replicaCount: 3
+
+rollout:
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: {}               # indefinite — Harness pipeline promotes
+        - setWeight: 60
+        - pause: { duration: 60s }
+        - setWeight: 100
+
+# Flip on once Prometheus is running in the cluster
+analysis:
+  enabled: false
+
+monitoring:
+  enabled: false
+
+ingress:
+  enabled: false

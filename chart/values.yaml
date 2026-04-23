@@ -1,0 +1,62 @@
+replicaCount: 2
+revisionHistoryLimit: 5
+
+image:
+  repository: ghcr.io/stefanprodan/podinfo
+  tag: ""                # defaults to Chart.appVersion
+  pullPolicy: IfNotPresent
+
+service:
+  port: 9898
+  targetPort: 9898
+  stableName: podinfo
+  canaryName: podinfo-canary
+
+rollout:
+  strategy:
+    canary:
+      # Override per env in envs/*.yaml
+      steps:
+        - setWeight: 25
+        - pause: {}
+        - setWeight: 50
+        - pause: { duration: 30s }
+        - setWeight: 75
+        - pause: { duration: 30s }
+
+analysis:
+  enabled: false
+  # Prometheus address reachable from the Rollout's AnalysisRun.
+  prometheusAddress: http://prometheus-operated.monitoring:9090
+  # Max allowable 5xx rate (0 - 1)
+  errorRateThreshold: 0.01
+  # Max allowable p99 latency in milliseconds
+  latencyP99Ms: 500
+
+monitoring:
+  enabled: false
+
+ingress:
+  enabled: false
+  className: traefik
+  host: podinfo.local
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+podAnnotations: {}
+podLabels: {}
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]

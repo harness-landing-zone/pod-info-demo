@@ -1,0 +1,17 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "podinfo.fullname" . }}
+  labels:
+    {{- include "podinfo.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "podinfo.selectorLabels" . | nindent 6 }}
+      role: stable
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+{{- end }}

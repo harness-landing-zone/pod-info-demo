@@ -1,0 +1,24 @@
+# Non-prod (k3d-np). Fast canary, auto-promotes — good for smoke testing.
+
+image:
+  tag: "6.11.2"
+
+replicaCount: 2
+
+rollout:
+  strategy:
+    canary:
+      steps:
+        - setWeight: 50
+        - pause: { duration: 15s }
+        - setWeight: 100
+
+# Flip on once Prometheus is running in the cluster
+analysis:
+  enabled: false
+
+monitoring:
+  enabled: false
+
+ingress:
+  enabled: false

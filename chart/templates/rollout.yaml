@@ -1,0 +1,58 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "podinfo.fullname" . }}
+  labels:
+    {{- include "podinfo.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "podinfo.selectorLabels" . | nindent 6 }}
+  strategy:
+    canary:
+      canaryService: {{ .Values.service.canaryName }}
+      stableService: {{ .Values.service.stableName }}
+      steps:
+        {{- toYaml .Values.rollout.strategy.canary.steps | nindent 8 }}
+  template:
+    metadata:
+      labels:
+        {{- include "podinfo.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - name: podinfo
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - ./podinfo
+            - --port=9898
+            - --level=info
+          ports:
+            - name: http
+              containerPort: 9898
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
