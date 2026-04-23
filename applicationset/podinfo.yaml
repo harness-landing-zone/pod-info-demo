@@ -1,14 +1,3 @@
-# ApplicationSet that deploys podinfo into both k3d clusters.
-#
-# BEFORE APPLYING:
-#   1. Commit this folder (pod-info-demo/) to a Git repo reachable from the k3d cluster agents.
-#   2. Replace <REPO_URL>, <REPO_REVISION>, and <PATH_TO_POD_INFO_DEMO> below with your values.
-#      (e.g. if you put the folder at the repo root: path: chart and $values/envs/...)
-#
-# Apply (either cluster's agent can host the ApplicationSet — Harness routes to the right
-# destination based on .spec.destination.name):
-#   kubectl --context k3d-np apply -f applicationset/podinfo.yaml -n gitops-agent
-
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -24,7 +13,7 @@ spec:
     - list:
         elements:
           - env: np
-            cluster: k3d-np          # Harness GitOps cluster identifier (see cluster.env)
+            cluster: k3d-np
           - env: live
             cluster: k3d-live
   template:
@@ -36,16 +25,16 @@ spec:
     spec:
       project: default
       sources:
-        - repoURL: <REPO_URL>                         # e.g. https://github.com/you/pod-info-demo
-          targetRevision: <REPO_REVISION>             # e.g. main
-          path: <PATH_TO_POD_INFO_DEMO>/chart         # e.g. chart (if folder is at repo root)
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          path: chart
           helm:
             releaseName: 'podinfo-{{ .env }}'
             ignoreMissingValueFiles: true
             valueFiles:
-              - '$values/<PATH_TO_POD_INFO_DEMO>/envs/{{ .env }}.yaml'
-        - repoURL: <REPO_URL>
-          targetRevision: <REPO_REVISION>
+              - '$values/envs/{{ .env }}.yaml'
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
           ref: values
       destination:
         name: '{{ .cluster }}'
