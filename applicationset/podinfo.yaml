@@ -23,7 +23,7 @@ spec:
         app: podinfo
         environment: '{{ .env }}'
     spec:
-      project: default
+      project: b5f0b0f5
       sources:
         - repoURL: https://github.com/harness-landing-zone/pod-info-demo
           targetRevision: main
@@ -42,7 +42,7 @@ spec:
       syncPolicy:
         automated:
           prune: true
-          selfHeal: false         # let the pipeline/rollout controller manage canary state
+          selfHeal: false
           allowEmpty: false
         syncOptions:
           - CreateNamespace=true
