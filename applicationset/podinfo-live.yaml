@@ -1,0 +1,62 @@
+# Apply ONLY to k3d-live:
+#   kubectl --context k3d-live apply -f applicationset/podinfo-live.yaml -n gitops-agent
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: podinfo
+  namespace: gitops-agent
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  syncPolicy:
+    preserveResourcesOnDeletion: false
+  generators:
+    - list:
+        elements:
+          - env: live
+  template:
+    metadata:
+      name: 'podinfo-{{ .env }}'
+      labels:
+        app: podinfo
+        environment: '{{ .env }}'
+    spec:
+      project: b5f0b0f5
+      sources:
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          path: chart
+          helm:
+            releaseName: 'podinfo-{{ .env }}'
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - '$values/envs/{{ .env }}.yaml'
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: podinfo
+      ignoreDifferences:
+        # argo-rollouts injects rollouts-pod-template-hash into Service selectors
+        # at runtime — ignore so Argo CD doesn't flag drift.
+        - group: ""
+          kind: Service
+          jsonPointers:
+            - /spec/selector
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: false
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
