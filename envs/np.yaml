@@ -3,7 +3,7 @@
 image:
   tag: "6.11.2"
 
-replicaCount: 2
+replicaCount: 4
 
 rollout:
   strategy:
