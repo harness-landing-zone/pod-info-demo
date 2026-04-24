@@ -1,7 +1,7 @@
 # Non-prod (k3d-np). Fast canary, auto-promotes — good for smoke testing.
 
 image:
-  tag: "6.11.2"
+  tag: "6.11.1"
 
 replicaCount: 4
 
