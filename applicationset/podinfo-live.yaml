@@ -4,7 +4,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: podinfo
+  name: podinfo-live
   namespace: gitops-agent
 spec:
   goTemplate: true
@@ -20,6 +20,8 @@ spec:
     metadata:
       name: 'podinfo-{{ .env }}'
       labels:
+        harness.io/serviceRef: "demoapp"
+        harness.io/envRef: '{{ .env }}'
         app: podinfo
         environment: '{{ .env }}'
     spec:
