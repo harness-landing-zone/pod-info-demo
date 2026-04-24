@@ -1,7 +1,7 @@
 # Live (k3d-live). Slow canary, pipeline-gated — simulates prod.
 
 image:
-  tag: "6.11.1"
+  tag: "6.11.2"
 
 replicaCount: 3
 
