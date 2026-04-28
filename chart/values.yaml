@@ -1,5 +1,6 @@
 replicaCount: 5
 revisionHistoryLimit: 5
+minReadySeconds: 30
 
 image:
   repository: ghcr.io/stefanprodan/podinfo
@@ -15,7 +16,11 @@ service:
 rollout:
   strategy:
     canary:
-      # Override per env in envs/*.yaml
+      maxSurge: 25%
+      maxUnavailable: 0
+      # Override per env in envs/*.yaml.
+      # Use `pause: {}` (indefinite) where the Harness pipeline Verify step
+      # should gate promotion. Durational pauses don't trigger Harness CV.
       steps:
         - setWeight: 25
         - pause: {}
@@ -50,7 +55,10 @@ resources:
     cpu: 200m
     memory: 128Mi
 
-podAnnotations: {}
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9898"
+  prometheus.io/path: /metrics
 podLabels: {}
 
 securityContext:

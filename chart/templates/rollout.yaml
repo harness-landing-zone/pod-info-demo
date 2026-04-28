@@ -7,6 +7,7 @@ metadata:
 spec:
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  minReadySeconds: {{ .Values.minReadySeconds }}
   selector:
     matchLabels:
       {{- include "podinfo.selectorLabels" . | nindent 6 }}
@@ -14,6 +15,8 @@ spec:
     canary:
       canaryService: {{ .Values.service.canaryName }}
       stableService: {{ .Values.service.stableName }}
+      maxSurge: {{ .Values.rollout.strategy.canary.maxSurge }}
+      maxUnavailable: {{ .Values.rollout.strategy.canary.maxUnavailable }}
       steps:
         {{- toYaml .Values.rollout.strategy.canary.steps | nindent 8 }}
   template:
