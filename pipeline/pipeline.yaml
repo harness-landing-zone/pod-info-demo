@@ -37,6 +37,7 @@ pipeline:
                       - name: image.tag
                         type: String
                         value: <+pipeline.stages.Dev.variables.defaultImageTag>
+                    allowEmptyCommit: true
               - step:
                   type: MergePR
                   name: Merge PR
@@ -50,7 +51,8 @@ pipeline:
                   name: Fetch Linked Apps
                   identifier: fetchLinkedApps
                   timeout: 10m
-                  spec: {}
+                  spec:
+                    filterByServiceEnvCluster: true
               - step:
                   type: GitOpsSync
                   name: GitOpsSync
@@ -145,6 +147,7 @@ pipeline:
                       - name: image.tag
                         type: String
                         value: <+pipeline.stages.Dev.variables.defaultImageTag>
+                    allowEmptyCommit: true
               - step:
                   type: MergePR
                   name: Merge PR
@@ -157,18 +160,20 @@ pipeline:
                   name: Fetch Linked Apps
                   identifier: fetchLinkedApps
                   timeout: 10m
-                  spec: {}
+                  spec:
+                    filterByServiceEnvCluster: true
               - step:
                   type: GitOpsSync
-                  name: Sync Canary
-                  identifier: syncCanary
-                  timeout: 10m
+                  name: ArgoCD Sync
+                  identifier: GitOps_Sync
                   spec:
-                    waitTillHealthy: false
                     prune: false
                     dryRun: false
                     applyOnly: false
                     forceApply: false
+                    applicationsList:
+                      - applicationName: podinfo-prod
+                        agentId: org.gitopsappteamone
                     retryStrategy: {}
                     retry: false
                     syncOptions:
@@ -180,34 +185,24 @@ pipeline:
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
                       serverSideApply: false
-                    # NO autoPromoteRolloutBehavior here — omitting it = sync only, canary PAUSES
-                    # at pause:{} for the gate. (Valid values are only promote-full|resume, both of
-                    # which auto-promote; the GitOps Rollout step below does the gated promote.)
-                    failOnTimeout: true
-                    applicationsList:
-                      - applicationName: podinfo-prod
-                        agentId: org.gitopsappteamone
+                  timeout: 10m
               - step:
                   type: HarnessApproval
                   name: Approve Canary Promotion
                   identifier: approveCanary
                   timeout: 1d
                   spec:
-                    approvalMessage: "Canary live at first step in prod — promote to full?"
+                    approvalMessage: Canary live at first step in prod — promote to full?
                     includePipelineExecutionHistory: true
                     approvers:
                       userGroups:
                         - _project_all_users
+                        - account._account_all_users
                       minimumCount: 1
                       disallowPipelineExecutor: false
                     approverInputs: []
-              # ----- PROGRESSIVE CANARY: promote 20 -> 60 -> 100, gated per hop -----
-              # Sync Canary landed the Rollout at setWeight 20, paused (Suspended) at gate 1.
-              # The approval above is the gate before the FIRST promotion.
+                    isAutoRejectEnabled: false
               - step:
-                  # resume = un-pause the Rollout = advance to the NEXT canary step
-                  # (gate 1 -> setWeight 60). NOT promote-full (which jumps to 100).
-                  # Waits until the Rollout re-suspends at gate 2.
                   type: GitOpsRollout
                   name: Promote to 60 Percent
                   identifier: promoteTo60
@@ -221,16 +216,12 @@ pipeline:
                     autoRolloutAction: resume
                   timeout: 10m
               - step:
-                  # Soak/bake window at 60%. (Later: swap or precede with a Verify step
-                  # once Prometheus + Monitored Service are wired — see CLAUDE.md NEXT.)
                   type: Wait
                   name: Soak at 60 Percent
                   identifier: soakAt60
                   spec:
                     duration: 2m
               - step:
-                  # Final hop: gate 2 -> setWeight 100. promote-full finishes the Rollout
-                  # (resumes any remaining steps); wait until the app is Healthy.
                   type: GitOpsRollout
                   name: Promote to 100 Percent
                   identifier: promoteTo100
@@ -281,7 +272,7 @@ pipeline:
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
                       serverSideApply: false
-                    autoPromoteRolloutBehavior: promote-full   # roll the Rollout back to the stable (reverted) image
+                    autoPromoteRolloutBehavior: promote-full
                     applicationsList:
                       - applicationName: podinfo-prod
                         agentId: org.gitopsappteamone
