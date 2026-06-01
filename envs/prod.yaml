@@ -1,20 +1,28 @@
+# Prod (appteam-one-prod). ARGO ROLLOUTS canary — pipeline-gated (Harness promotes each step).
 workload:
   kind: Rollout
+
 image:
-  tag: v0.1
+  tag: "v0.2"          # baseline; pipeline promotes v0.2 after dev verify + approval
+
 replicaCount: 3
+
 rollout:
   strategy:
     canary:
       steps:
-      - setWeight: 20
-      - pause: {}
-      - setWeight: 60
-      - pause: {}
-      - setWeight: 100
+        - setWeight: 20
+        - pause: {}               # gate 1 — Harness promotes to 60 (Suspended here)
+        - setWeight: 60
+        - pause: {}               # gate 2 — Harness soaks (Wait step) then promotes to 100
+        - setWeight: 100
+
+# Flip on once Prometheus is running in the cluster
 analysis:
   enabled: false
+
 monitoring:
   enabled: false
+
 ingress:
   enabled: false
