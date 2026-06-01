@@ -9,7 +9,8 @@ workload:
 
 image:
   repository: docker.io/mkandylis/podinfo   # your image (Docker Hub) for the pipeline test
-  tag: ""                # set per env (envs/*.yaml); pipeline's Update Release Repo bumps it
+  tag: "v0.1"            # default fallback; env files (envs/*.yaml) set the real tag,
+                         # and the pipeline's Update Release Repo bumps image.tag per env
   pullPolicy: IfNotPresent
 
 service:
