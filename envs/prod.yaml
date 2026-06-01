@@ -3,7 +3,7 @@ workload:
   kind: Rollout
 
 image:
-  tag: "6.11.2"
+  tag: "v0.1"          # baseline; pipeline promotes v0.2 after dev verify + approval
 
 replicaCount: 3
 

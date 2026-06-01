@@ -8,8 +8,8 @@ workload:
   kind: Rollout
 
 image:
-  repository: ghcr.io/stefanprodan/podinfo
-  tag: ""                # defaults to Chart.appVersion
+  repository: docker.io/mkandylis/podinfo   # your image (Docker Hub) for the pipeline test
+  tag: ""                # set per env (envs/*.yaml); pipeline's Update Release Repo bumps it
   pullPolicy: IfNotPresent
 
 service:
