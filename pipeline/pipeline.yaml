@@ -205,10 +205,11 @@ pipeline:
               # Sync Canary landed the Rollout at setWeight 20, paused (Suspended) at gate 1.
               # The approval above is the gate before the FIRST promotion.
               - step:
-                  # promote = advance to the NEXT canary step (gate 1 -> setWeight 60),
-                  # NOT promote-full. Waits until the Rollout re-suspends at gate 2.
+                  # resume = un-pause the Rollout = advance to the NEXT canary step
+                  # (gate 1 -> setWeight 60). NOT promote-full (which jumps to 100).
+                  # Waits until the Rollout re-suspends at gate 2.
                   type: GitOpsRollout
-                  name: Promote to 60%
+                  name: Promote to 60 Percent
                   identifier: promoteTo60
                   spec:
                     appName: podinfo-prod
@@ -217,13 +218,13 @@ pipeline:
                     rolloutName: podinfo
                     waitUntilHealthStatus:
                       healthStatus: Suspended
-                    autoRolloutAction: promote
+                    autoRolloutAction: resume
                   timeout: 10m
               - step:
                   # Soak/bake window at 60%. (Later: swap or precede with a Verify step
                   # once Prometheus + Monitored Service are wired — see CLAUDE.md NEXT.)
                   type: Wait
-                  name: Soak at 60%
+                  name: Soak at 60 Percent
                   identifier: soakAt60
                   spec:
                     duration: 2m
@@ -231,7 +232,7 @@ pipeline:
                   # Final hop: gate 2 -> setWeight 100. promote-full finishes the Rollout
                   # (resumes any remaining steps); wait until the app is Healthy.
                   type: GitOpsRollout
-                  name: Promote to 100%
+                  name: Promote to 100 Percent
                   identifier: promoteTo100
                   spec:
                     appName: podinfo-prod
