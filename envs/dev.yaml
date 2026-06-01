@@ -9,3 +9,4 @@ monitoring:
   enabled: false
 ingress:
   enabled: false
+tag: v0.2
