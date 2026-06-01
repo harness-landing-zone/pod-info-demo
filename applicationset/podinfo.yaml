@@ -23,7 +23,7 @@ spec:
         app: podinfo
         environment: '{{ .env }}'
     spec:
-      project: b5f0b0f5
+      project: appteamone
       sources:
         - repoURL: https://github.com/harness-landing-zone/pod-info-demo
           targetRevision: main
