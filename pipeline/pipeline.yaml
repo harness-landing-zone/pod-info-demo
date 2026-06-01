@@ -1,0 +1,302 @@
+pipeline:
+  name: Pipeline
+  identifier: Pipeline
+  projectIdentifier: appteamone
+  orgIdentifier: gitopsdemo
+  tags: {}
+  stages:
+    - stage:
+        name: Dev
+        identifier: Dev
+        description: ""
+        type: Deployment
+        variables:
+          - name: defaultImageTag
+            type: String
+            value: <+input>
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            serviceRef: appone
+          environment:
+            environmentRef: dev
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: org.incluster
+                agentIdentifier: org.gitopsappteamone
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image.tag
+                        type: String
+                        value: <+pipeline.stages.Dev.variables.defaultImageTag>
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  timeout: 10m
+                  spec:
+                    deleteSourceBranch: true
+                    mergeStrategy: merge
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: GitOpsSync
+                  identifier: GitOpsSync
+                  timeout: 10m
+                  spec:
+                    waitTillHealthy: true
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    retryStrategy: {}
+                    retry: false
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    autoPromoteRolloutBehavior: promote-full
+                    degradedStateTimeout: ""
+                    failOnTimeout: true
+                    applicationsList:
+                      - applicationName: podinfo-dev
+                        agentId: org.gitopsappteamone
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: RevertPR
+                  identifier: RevertPR
+                  timeout: 10m
+                  spec:
+                    commitId: <+pipeline.stages.Dev.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+              - step:
+                  type: MergePR
+                  name: Merge Revert PR
+                  identifier: mergeRevertPR
+                  timeout: 10m
+                  spec:
+                    deleteSourceBranch: true
+                    mergeStrategy: merge
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: syncRollback
+                  timeout: 3m
+                  spec:
+                    waitTillHealthy: true
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    applicationsList: []
+                    retryStrategy: {}
+                    retry: false
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: Prod
+        identifier: Prod
+        description: ""
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Release Repo
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image.tag
+                        type: String
+                        value: <+pipeline.stages.Dev.variables.defaultImageTag>
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  spec:
+                    deleteSourceBranch: true
+                  timeout: 10m
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  type: GitOpsSync
+                  name: Sync Canary
+                  identifier: syncCanary
+                  timeout: 10m
+                  spec:
+                    waitTillHealthy: false
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    retryStrategy: {}
+                    retry: false
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    # NO autoPromoteRolloutBehavior here — omitting it = sync only, canary PAUSES
+                    # at pause:{} for the gate. (Valid values are only promote-full|resume, both of
+                    # which auto-promote; the GitOps Rollout step below does the gated promote.)
+                    failOnTimeout: true
+                    applicationsList:
+                      - applicationName: podinfo-prod
+                        agentId: org.gitopsappteamone
+              - step:
+                  type: HarnessApproval
+                  name: Approve Canary Promotion
+                  identifier: approveCanary
+                  timeout: 1d
+                  spec:
+                    approvalMessage: "Canary live at first step in prod — promote to full?"
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      userGroups:
+                        - _project_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                    approverInputs: []
+              # ----- PROGRESSIVE CANARY: promote 20 -> 60 -> 100, gated per hop -----
+              # Sync Canary landed the Rollout at setWeight 20, paused (Suspended) at gate 1.
+              # The approval above is the gate before the FIRST promotion.
+              - step:
+                  # promote = advance to the NEXT canary step (gate 1 -> setWeight 60),
+                  # NOT promote-full. Waits until the Rollout re-suspends at gate 2.
+                  type: GitOpsRollout
+                  name: Promote to 60%
+                  identifier: promoteTo60
+                  spec:
+                    appName: podinfo-prod
+                    agentIdentifier: org.gitopsappteamone
+                    namespace: appteam-one-prod
+                    rolloutName: podinfo
+                    waitUntilHealthStatus:
+                      healthStatus: Suspended
+                    autoRolloutAction: promote
+                  timeout: 10m
+              - step:
+                  # Soak/bake window at 60%. (Later: swap or precede with a Verify step
+                  # once Prometheus + Monitored Service are wired — see CLAUDE.md NEXT.)
+                  type: Wait
+                  name: Soak at 60%
+                  identifier: soakAt60
+                  spec:
+                    duration: 2m
+              - step:
+                  # Final hop: gate 2 -> setWeight 100. promote-full finishes the Rollout
+                  # (resumes any remaining steps); wait until the app is Healthy.
+                  type: GitOpsRollout
+                  name: Promote to 100%
+                  identifier: promoteTo100
+                  spec:
+                    appName: podinfo-prod
+                    agentIdentifier: org.gitopsappteamone
+                    namespace: appteam-one-prod
+                    rolloutName: podinfo
+                    waitUntilHealthStatus:
+                      healthStatus: Healthy
+                    autoRolloutAction: promote-full
+                  timeout: 10m
+            rollbackSteps:
+              - step:
+                  type: RevertPR
+                  name: RevertPR
+                  identifier: RevertPR
+                  timeout: 10m
+                  spec:
+                    commitId: <+pipeline.stages.Prod.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+              - step:
+                  type: MergePR
+                  name: Merge Revert PR
+                  identifier: mergeRevertPR
+                  timeout: 10m
+                  spec:
+                    deleteSourceBranch: true
+                    mergeStrategy: merge
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: syncRollbackProd
+                  timeout: 5m
+                  spec:
+                    waitTillHealthy: true
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    retryStrategy: {}
+                    retry: false
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    autoPromoteRolloutBehavior: promote-full   # roll the Rollout back to the stable (reverted) image
+                    applicationsList:
+                      - applicationName: podinfo-prod
+                        agentId: org.gitopsappteamone
+          service:
+            useFromStage:
+              stage: Dev
+          environment:
+            environmentRef: prod
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: org.incluster
+                agentIdentifier: org.gitopsappteamone
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback

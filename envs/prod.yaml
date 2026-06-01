@@ -12,9 +12,9 @@ rollout:
     canary:
       steps:
         - setWeight: 20
-        - pause: {}               # indefinite — Harness pipeline promotes
+        - pause: {}               # gate 1 — Harness promotes to 60 (Suspended here)
         - setWeight: 60
-        - pause: { duration: 60s }
+        - pause: {}               # gate 2 — Harness soaks (Wait step) then promotes to 100
         - setWeight: 100
 
 # Flip on once Prometheus is running in the cluster
