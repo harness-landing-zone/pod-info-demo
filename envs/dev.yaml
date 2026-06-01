@@ -1,21 +1,13 @@
-# Live (k3d-live). Slow canary, pipeline-gated — simulates prod.
+# Dev (appteam-one-dev). CLASSIC Argo deployment — plain Deployment, NO rollouts.
+workload:
+  kind: Deployment
 
 image:
-  tag: "6.11.2"
+  tag: "6.11.1"
 
-replicaCount: 3
+replicaCount: 4
 
-rollout:
-  strategy:
-    canary:
-      steps:
-        - setWeight: 20
-        - pause: {}               # indefinite — Harness pipeline promotes
-        - setWeight: 60
-        - pause: { duration: 60s }
-        - setWeight: 100
-
-# Flip on once Prometheus is running in the cluster
+# (rollout/canary settings ignored for a Deployment)
 analysis:
   enabled: false
 

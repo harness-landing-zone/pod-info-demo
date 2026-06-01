@@ -1,16 +1,20 @@
-# Non-prod (k3d-np). Fast canary, auto-promotes — good for smoke testing.
+# Prod (appteam-one-prod). ARGO ROLLOUTS canary — pipeline-gated (Harness promotes each step).
+workload:
+  kind: Rollout
 
 image:
-  tag: "6.11.1"
+  tag: "6.11.2"
 
-replicaCount: 4
+replicaCount: 3
 
 rollout:
   strategy:
     canary:
       steps:
-        - setWeight: 50
-        - pause: { duration: 15s }
+        - setWeight: 20
+        - pause: {}               # indefinite — Harness pipeline promotes
+        - setWeight: 60
+        - pause: { duration: 60s }
         - setWeight: 100
 
 # Flip on once Prometheus is running in the cluster

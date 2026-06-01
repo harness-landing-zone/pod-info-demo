@@ -2,6 +2,11 @@ replicaCount: 5
 revisionHistoryLimit: 5
 minReadySeconds: 30
 
+# Workload type: "Rollout" (Argo Rollouts canary; needs a RolloutManager controller in the ns)
+# or "Deployment" (classic GitOps, no progressive delivery). Override per env in envs/*.yaml.
+workload:
+  kind: Rollout
+
 image:
   repository: ghcr.io/stefanprodan/podinfo
   tag: ""                # defaults to Chart.appVersion

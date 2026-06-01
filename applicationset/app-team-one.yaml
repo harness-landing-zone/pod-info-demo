@@ -1,12 +1,14 @@
-# ApplicationSet for the app-team-one Harness project — DEV instance (argocd-dev).
-# One ApplicationSet per Harness project; this project = the podinfo application.
-# Lives in argocd-dev (the namespace the dev BYOA agent watches). The prod sibling
-# lives in argocd-prod with env=prod (see app-team-one-prod.yaml when we get there).
+# ApplicationSet for App Team One — lives in the team's Argo CD instance (gitops-app-team-one).
+# Per-team model: ONE instance, environments = namespaces. Generates two Applications:
+#   podinfo-dev  -> appteam-one-dev   (automated sync; fast iteration)
+#   podinfo-prod -> appteam-one-prod  (MANUAL sync; promotion gated by the Harness pipeline)
+# Both env namespaces must exist and be labeled argocd.argoproj.io/managed-by=gitops-app-team-one,
+# and each needs a RolloutManager (argo-rollouts controller).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: app-team-one
-  namespace: argocd-dev
+  namespace: gitops-app-team-one
 spec:
   goTemplate: true
   goTemplateOptions:
@@ -14,19 +16,23 @@ spec:
   generators:
     - list:
         elements:
-          - env: dev          # -> envs/dev.yaml (you renamed np.yaml -> dev.yaml)
+          - env: dev
+            namespace: appteam-one-dev
+          - env: prod
+            namespace: appteam-one-prod
   template:
     metadata:
       name: 'podinfo-{{ .env }}'
       labels:
-        harness.io/serviceRef: podinfo
+        # Harness GitOps mapping labels (LABELS, not annotations):
+        # serviceRef = Harness service identifier (appone); envRef = Harness environment id.
+        harness.io/serviceRef: appone
         harness.io/envRef: '{{ .env }}'
         app: podinfo
         environment: '{{ .env }}'
     spec:
       project: app-team-one
-      # Multi-source: Helm chart from path `chart`, env value file pulled via the
-      # `$values` ref to the same repo (Argo CD multi-source pattern).
+      # Multi-source: Helm chart from path `chart`, env value file via the `$values` ref.
       sources:
         - repoURL: https://github.com/harness-landing-zone/pod-info-demo
           targetRevision: main
@@ -36,11 +42,6 @@ spec:
             ignoreMissingValueFiles: true
             valueFiles:
               - '$values/envs/{{ .env }}.yaml'
-            # TEMPORARY OpenShift fix (remove once the chart is fixed in GitHub):
-            # the chart hardcodes container securityContext.runAsUser: 10001, which
-            # OpenShift's restricted-v2 SCC rejects (UID must be in the namespace's
-            # assigned range). Null it so OpenShift assigns a valid non-root UID.
-            # Inline `values` has highest precedence (chart < env file < this).
             values: |
               securityContext:
                 runAsUser: null
@@ -48,20 +49,24 @@ spec:
           targetRevision: main
           ref: values
       destination:
-        server: https://kubernetes.default.svc   # in-cluster
-        namespace: team-one-dev                   # managed-by=argocd-dev, has the RolloutManager
+        server: https://kubernetes.default.svc   # in-cluster (this team's cluster)
+        namespace: '{{ .namespace }}'
       ignoreDifferences:
-        # argo-rollouts injects rollouts-pod-template-hash into Service selectors at
-        # runtime — ignore so Argo CD doesn't flag perpetual drift.
+        # argo-rollouts injects rollouts-pod-template-hash into Service selectors at runtime.
         - group: ""
           kind: Service
           jsonPointers:
             - /spec/selector
+  # Per-env sync posture: dev auto-syncs; prod is manual (Harness pipeline triggers the promotion).
+  templatePatch: |
+    spec:
       syncPolicy:
+        {{- if eq .env "dev" }}
         automated:
           prune: true
           selfHeal: false
           allowEmpty: false
+        {{- end }}
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

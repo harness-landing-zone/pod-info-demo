@@ -1,3 +1,5 @@
+{{- if eq .Values.workload.kind "Rollout" }}
+# Canary Service — only for the Rollout (canary) workload type.
 apiVersion: v1
 kind: Service
 metadata:
@@ -14,3 +16,4 @@ spec:
       protocol: TCP
   selector:
     {{- include "podinfo.selectorLabels" . | nindent 4 }}
+{{- end }}

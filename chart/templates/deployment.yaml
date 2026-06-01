@@ -1,6 +1,7 @@
-{{- if eq .Values.workload.kind "Rollout" }}
-apiVersion: argoproj.io/v1alpha1
-kind: Rollout
+{{- if eq .Values.workload.kind "Deployment" }}
+# Classic GitOps deployment (no progressive delivery). Used by dev.
+apiVersion: apps/v1
+kind: Deployment
 metadata:
   name: {{ include "podinfo.fullname" . }}
   labels:
@@ -12,14 +13,6 @@ spec:
   selector:
     matchLabels:
       {{- include "podinfo.selectorLabels" . | nindent 6 }}
-  strategy:
-    canary:
-      canaryService: {{ .Values.service.canaryName }}
-      stableService: {{ .Values.service.stableName }}
-      maxSurge: {{ .Values.rollout.strategy.canary.maxSurge }}
-      maxUnavailable: {{ .Values.rollout.strategy.canary.maxUnavailable }}
-      steps:
-        {{- toYaml .Values.rollout.strategy.canary.steps | nindent 8 }}
   template:
     metadata:
       labels:
