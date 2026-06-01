@@ -1,7 +1,7 @@
 workload:
   kind: Deployment
 image:
-  tag: v000
+  tag: v0001
 replicaCount: 4
 analysis:
   enabled: false
