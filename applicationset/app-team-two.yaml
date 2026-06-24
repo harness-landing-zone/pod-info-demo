@@ -1,3 +1,10 @@
+# ApplicationSet for App Team Two — TEMPORARILY hosted on the gitops-app-team-one
+# Argo CD instance (its agent is healthy; argocd-prod's is crash-looping). To be
+# cleared and redeployed onto its proper hub later. Generates two Applications:
+#   podinfo-dev  -> appteam-two-dev   (automated sync; fast iteration)
+#   podinfo-prod -> appteam-two-prod  (MANUAL sync; promotion gated by the Harness pipeline)
+# Both env namespaces must exist and be labeled argocd.argoproj.io/managed-by=gitops-app-team-one,
+# and each needs a RolloutManager (argo-rollouts controller).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -16,7 +23,7 @@ spec:
             namespace: appteam-two-prod
   template:
     metadata:
-      name: 'podinfo-{{ .env }}'
+      name: 'podinfo-two-{{ .env }}'
       labels:
         # Harness GitOps mapping labels (LABELS, not annotations):
         # serviceRef = Harness service identifier (apptwo); envRef = Harness environment id.
