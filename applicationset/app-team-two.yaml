@@ -32,7 +32,7 @@ spec:
           targetRevision: main
           path: chart
           helm:
-            releaseName: 'podinfo-{{ .env }}'
+            releaseName: 'podinfo-two-{{ .env }}'
             ignoreMissingValueFiles: true
             valueFiles:
               - '$values/envs/{{ .env }}.yaml'
