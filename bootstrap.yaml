@@ -2,7 +2,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: platform-bootstrap
-  namespace: gitops-app-team-one
+  namespace: gitops-preprod
 spec:
   goTemplate: true
   goTemplateOptions:
@@ -17,7 +17,8 @@ spec:
     metadata:
       name: 'appset-{{ .metadata.name }}'
     spec:
-      project: default
+      # The appset-deploying Applications belong to the PLATFORM team's project.
+      project: platformteam
       source:
         repoURL: https://github.com/harness-landing-zone/pod-info-demo
         targetRevision: main

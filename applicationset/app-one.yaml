@@ -1,14 +1,8 @@
-# ApplicationSet for App Team One — lives in the team's Argo CD instance (gitops-app-team-one).
-# Per-team model: ONE instance, environments = namespaces. Generates two Applications:
-#   podinfo-dev  -> appteam-one-dev   (automated sync; fast iteration)
-#   podinfo-prod -> appteam-one-prod  (MANUAL sync; promotion gated by the Harness pipeline)
-# Both env namespaces must exist and be labeled argocd.argoproj.io/managed-by=gitops-app-team-one,
-# and each needs a RolloutManager (argo-rollouts controller).
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: app-team-one
-  namespace: gitops-app-team-one
+  name: app-one
+  namespace: gitops-preprod
 spec:
   goTemplate: true
   goTemplateOptions:
@@ -17,21 +11,19 @@ spec:
     - list:
         elements:
           - env: dev
-            namespace: appteam-one-dev
-          - env: prod
-            namespace: appteam-one-prod
+            namespace: podinfo-dev
   template:
     metadata:
       name: 'podinfo-{{ .env }}'
       labels:
-        # Harness GitOps mapping labels (LABELS, not annotations):
-        # serviceRef = Harness service identifier (appone); envRef = Harness environment id.
+        # Harness GitOps mapping LABELS (not annotations):
+        # serviceRef = Harness Service id (appone, project appteamone); envRef = Harness Environment id.
         harness.io/serviceRef: appone
         harness.io/envRef: '{{ .env }}'
         app: podinfo
         environment: '{{ .env }}'
     spec:
-      project: app-team-one
+      project: appteamone        # generated Application -> appteamone AppProject (NOT platformteam)
       # Multi-source: Helm chart from path `chart`, env value file via the `$values` ref.
       sources:
         - repoURL: https://github.com/harness-landing-zone/pod-info-demo
@@ -44,12 +36,12 @@ spec:
               - '$values/envs/{{ .env }}.yaml'
             values: |
               securityContext:
-                runAsUser: null
+                runAsUser: null     # OpenShift restricted-v2: let the SCC assign the UID
         - repoURL: https://github.com/harness-landing-zone/pod-info-demo
           targetRevision: main
           ref: values
       destination:
-        server: https://kubernetes.default.svc   # in-cluster (this team's cluster)
+        server: https://kubernetes.default.svc
         namespace: '{{ .namespace }}'
       ignoreDifferences:
         # argo-rollouts injects rollouts-pod-template-hash into Service selectors at runtime.
@@ -57,16 +49,11 @@ spec:
           kind: Service
           jsonPointers:
             - /spec/selector
-  # Per-env sync posture: dev auto-syncs; prod is manual (Harness pipeline triggers the promotion).
-  templatePatch: |
-    spec:
       syncPolicy:
-        {{- if eq .env "dev" }}
-        automated:
+        automated:                 # dev auto-syncs (fast iteration)
           prune: true
           selfHeal: false
           allowEmpty: false
-        {{- end }}
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
