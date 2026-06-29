@@ -11,7 +11,7 @@ spec:
     - list:
         elements:
           - env: prod
-            namespace: podinfo-prod
+            namespace: podinfo-two-prod
   template:
     metadata:
       name: 'podinfo-two-{{ .env }}'
