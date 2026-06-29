@@ -12,6 +12,10 @@ spec:
         elements:
           - env: dev
             namespace: podinfo-dev
+          - env: staging
+            namespace: podinfo-staging
+          - env: preprod
+            namespace: podinfo-preprod
   template:
     metadata:
       name: 'podinfo-{{ .env }}'

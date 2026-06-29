@@ -1,8 +1,12 @@
+# PROD bootstrap (app-of-appsets) — runs on the gitops-prod instance.
+# Mirror of bootstrap.yaml but scans applicationset/prod/*.yaml and installs those appsets into
+# the gitops-prod platform ns. Generated Applications belong to the platformteam project.
+# Applied by the platform admin: oc apply -f bootstrap-prod.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: platform-bootstrap
-  namespace: gitops-preprod
+  namespace: gitops-prod
 spec:
   goTemplate: true
   goTemplateOptions:
@@ -12,26 +16,21 @@ spec:
         repoURL: https://github.com/harness-landing-zone/pod-info-demo
         revision: main
         files:
-          - path: applicationset/preprod/*.yaml
+          - path: applicationset/prod/*.yaml
   template:
     metadata:
       name: 'appset-{{ .metadata.name }}'
     spec:
-      # The appset-deploying Applications belong to the PLATFORM team's project.
       project: platformteam
       source:
         repoURL: https://github.com/harness-landing-zone/pod-info-demo
         targetRevision: main
-        # .path.path = the matched file's directory (e.g. applicationset/preprod) — dynamic so the
-        # same template works for any subfolder.
         path: '{{ .path.path }}'
         directory:
           recurse: false
-          # Deploy only this one file out of the folder.
           include: '{{ .path.filename }}'
       destination:
         server: https://kubernetes.default.svc
-        # "Relevant namespace" = the namespace each appset declares in its metadata.
         namespace: '{{ .metadata.namespace }}'
       syncPolicy:
         automated:

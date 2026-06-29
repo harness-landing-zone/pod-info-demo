@@ -1,0 +1,63 @@
+# app-one ApplicationSet — App Team One, PROD tier (lives in the platform ns gitops-prod).
+# Deployed by the PROD bootstrap (bootstrap-prod) on gitops-prod; generated Application goes to
+# the appteamone AppProject on gitops-prod + the podinfo-prod namespace.
+# prod = Argo Rollouts canary (envs/prod.yaml: workload.kind Rollout). MANUAL sync — the Harness
+# pipeline gates the promotion (no automated syncPolicy here).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: app-one
+  namespace: gitops-prod
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - list:
+        elements:
+          - env: prod
+            namespace: podinfo-prod
+  template:
+    metadata:
+      name: 'podinfo-{{ .env }}'
+      labels:
+        harness.io/serviceRef: appone
+        harness.io/envRef: '{{ .env }}'
+        app: podinfo
+        environment: '{{ .env }}'
+    spec:
+      project: appteamone
+      sources:
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          path: chart
+          helm:
+            releaseName: 'podinfo-{{ .env }}'
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - '$values/envs/{{ .env }}.yaml'
+            values: |
+              securityContext:
+                runAsUser: null
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ .namespace }}'
+      ignoreDifferences:
+        - group: ""
+          kind: Service
+          jsonPointers:
+            - /spec/selector
+      syncPolicy:
+        # NO automated block: prod is manual (Harness pipeline promotes). CreateNamespace off too
+        # (podinfo-prod is pre-created + managed-by gitops-prod).
+        syncOptions:
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
