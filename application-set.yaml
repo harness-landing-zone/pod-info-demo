@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-bootstrap
+  namespace: gitops-app-team-one
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - git:
+        repoURL: https://github.com/harness-landing-zone/pod-info-demo
+        revision: main
+        files:
+          - path: applicationset/*.yaml
+  template:
+    metadata:
+      # One wrapper Application per appset file, named after the appset it carries.
+      name: 'appset-{{ .metadata.name }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/harness-landing-zone/pod-info-demo
+        targetRevision: main
+        path: applicationset
+        directory:
+          recurse: false
+          # Deploy only this one file out of the folder.
+          include: '{{ .path.filename }}'
+      destination:
+        server: https://kubernetes.default.svc
+        # "Relevant namespace" = the namespace each appset declares in its metadata.
+        namespace: '{{ .metadata.namespace }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
