@@ -8,10 +8,6 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
-    # Pure CLUSTER generator -> ONE Application per matched cluster = true per-cluster
-    # separation. Selects every non-prod spoke (tier=nonprod -> dev + staging). Each
-    # cluster's own `environment` label (dev|staging) drives the namespace, env value
-    # file and AppProject, so each env lands on its OWN cluster.
     - clusters:
         selector:
           matchLabels:
@@ -22,8 +18,6 @@ spec:
     metadata:
       name: 'podinfo-{{ .values.env }}'
       labels:
-        # Harness GitOps mapping LABELS (not annotations):
-        # serviceRef = Harness Service id (appone, project appteamone); envRef = Harness Environment id.
         harness.io/serviceRef: appone
         harness.io/envRef: '{{ .values.env }}'
         app: podinfo
