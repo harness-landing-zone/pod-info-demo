@@ -1,8 +1,8 @@
 # app-one ApplicationSet — App Team One, PROD tier (lives in the platform ns gitops-prod).
-# Deployed by the PROD bootstrap (bootstrap-prod) on gitops-prod; generated Application goes to
-# the appteamone AppProject on gitops-prod + the podinfo-prod namespace.
-# prod = Argo Rollouts canary (envs/prod.yaml: workload.kind Rollout). MANUAL sync — the Harness
-# pipeline gates the promotion (no automated syncPolicy here).
+# Pure cluster generator: targets the prod spoke (tier=prod); its `environment` label (prod)
+# drives the namespace, env value file and AppProject. MANUAL sync — the Harness pipeline gates
+# promotion. prod = Argo Rollouts canary (envs/prod.yaml) so the prod spoke needs the
+# argo-rollouts CRD + controller installed.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -13,36 +13,31 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
-    # The CLUSTER is chosen by labels on its ArgoCD cluster Secret (environment=prod).
-    - matrix:
-        generators:
-          - clusters:
-              selector:
-                matchLabels:
-                  environment: prod
-          - list:
-              elements:
-                - env: prod
-                  namespace: podinfo-prod
+    - clusters:
+        selector:
+          matchLabels:
+            tier: prod
+        values:
+          env: '{{ .metadata.labels.environment }}'
   template:
     metadata:
-      name: 'podinfo-{{ .env }}'
+      name: 'podinfo-{{ .values.env }}'
       labels:
         harness.io/serviceRef: appone
-        harness.io/envRef: '{{ .env }}'
+        harness.io/envRef: '{{ .values.env }}'
         app: podinfo
-        environment: '{{ .env }}'
+        environment: '{{ .values.env }}'
     spec:
-      project: appteamone
+      project: 'appteamone-{{ .values.env }}'
       sources:
         - repoURL: https://github.com/harness-landing-zone/pod-info-demo
           targetRevision: main
           path: chart
           helm:
-            releaseName: 'podinfo-{{ .env }}'
+            releaseName: 'podinfo-{{ .values.env }}'
             ignoreMissingValueFiles: true
             valueFiles:
-              - '$values/envs/{{ .env }}.yaml'
+              - '$values/envs/{{ .values.env }}.yaml'
             values: |
               securityContext:
                 runAsUser: null
@@ -50,10 +45,9 @@ spec:
           targetRevision: main
           ref: values
       destination:
-        # Cluster supplied by the clusters generator (the secret labeled environment=prod).
-        # .name is the registered cluster-secret name, so this survives k3d's ephemeral ports.
+        # .name = the matched cluster's registered secret name (prod).
         name: '{{ .name }}'
-        namespace: '{{ .namespace }}'
+        namespace: 'podinfo-{{ .values.env }}'
       ignoreDifferences:
         - group: ""
           kind: Service
@@ -62,7 +56,6 @@ spec:
       syncPolicy:
         # NO automated block: prod is manual (Harness pipeline promotes).
         syncOptions:
-          # podinfo-prod is NOT pre-created on the prod spoke, so let Argo create it.
           - CreateNamespace=true
           - ServerSideApply=true
         retry:

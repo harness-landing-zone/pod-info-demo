@@ -8,43 +8,39 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
-    # The CLUSTER is chosen by labels on its ArgoCD cluster Secret (environment=nonprod),
-    - matrix:
-        generators:
-          - clusters:
-              selector:
-                matchLabels:
-                  environment: nonprod
-          - list:
-              elements:
-                - env: dev
-                  namespace: podinfo-dev
-                - env: staging
-                  namespace: podinfo-staging
+    # Pure CLUSTER generator -> ONE Application per matched cluster = true per-cluster
+    # separation. Selects every non-prod spoke (tier=nonprod -> dev + staging). Each
+    # cluster's own `environment` label (dev|staging) drives the namespace, env value
+    # file and AppProject, so each env lands on its OWN cluster.
+    - clusters:
+        selector:
+          matchLabels:
+            tier: nonprod
+        values:
+          env: '{{ .metadata.labels.environment }}'
   template:
     metadata:
-      name: 'podinfo-{{ .env }}'
+      name: 'podinfo-{{ .values.env }}'
       labels:
         # Harness GitOps mapping LABELS (not annotations):
         # serviceRef = Harness Service id (appone, project appteamone); envRef = Harness Environment id.
         harness.io/serviceRef: appone
-        harness.io/envRef: '{{ .env }}'
+        harness.io/envRef: '{{ .values.env }}'
         app: podinfo
-        environment: '{{ .env }}'
+        environment: '{{ .values.env }}'
     spec:
-      # Per-namespace AppProject so dev and staging can have different group access:
-      #   dev -> appteamone-dev, staging -> appteamone-staging
-      project: 'appteamone-{{ .env }}'
+      # Per-env AppProject, each locked to exactly one cluster+namespace (proves isolation).
+      project: 'appteamone-{{ .values.env }}'
       # Multi-source: Helm chart from path `chart`, env value file via the `$values` ref.
       sources:
         - repoURL: https://github.com/harness-landing-zone/pod-info-demo
           targetRevision: main
           path: chart
           helm:
-            releaseName: 'podinfo-{{ .env }}'
+            releaseName: 'podinfo-{{ .values.env }}'
             ignoreMissingValueFiles: true
             valueFiles:
-              - '$values/envs/{{ .env }}.yaml'
+              - '$values/envs/{{ .values.env }}.yaml'
             values: |
               securityContext:
                 runAsUser: null     # OpenShift restricted-v2: let the SCC assign the UID
@@ -52,8 +48,9 @@ spec:
           targetRevision: main
           ref: values
       destination:
+        # .name = the matched cluster's registered secret name (dev | staging).
         name: '{{ .name }}'
-        namespace: '{{ .namespace }}'
+        namespace: 'podinfo-{{ .values.env }}'
       ignoreDifferences:
         - group: ""
           kind: Service

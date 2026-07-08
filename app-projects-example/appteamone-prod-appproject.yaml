@@ -1,0 +1,16 @@
+# AppProject: App Team One — PROD Cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: appteamone-prod
+  namespace: gitops-prod
+spec:
+  description: App Team One — prod namespace on the prod spoke
+  destinations:
+    - name: prod
+      namespace: podinfo-prod
+  sourceRepos:
+    - https://github.com/harness-landing-zone/pod-info-demo
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
