@@ -9,7 +9,6 @@ spec:
     - missingkey=error
   generators:
     # The CLUSTER is chosen by labels on its ArgoCD cluster Secret (environment=nonprod),
-    # not hardcoded. The inner list fans out the namespaces the non-prod tier runs on it.
     - matrix:
         generators:
           - clusters:
@@ -33,7 +32,9 @@ spec:
         app: podinfo
         environment: '{{ .env }}'
     spec:
-      project: appteamone        # generated Application -> appteamone AppProject (NOT platformteam)
+      # Per-namespace AppProject so dev and staging can have different group access:
+      #   dev -> appteamone-dev, staging -> appteamone-staging
+      project: 'appteamone-{{ .env }}'
       # Multi-source: Helm chart from path `chart`, env value file via the `$values` ref.
       sources:
         - repoURL: https://github.com/harness-landing-zone/pod-info-demo
@@ -51,18 +52,15 @@ spec:
           targetRevision: main
           ref: values
       destination:
-        # Cluster supplied by the clusters generator (the secret labeled environment=nonprod).
-        # .name is the registered cluster-secret name, so this survives k3d's ephemeral ports.
         name: '{{ .name }}'
         namespace: '{{ .namespace }}'
       ignoreDifferences:
-        # argo-rollouts injects rollouts-pod-template-hash into Service selectors at runtime.
         - group: ""
           kind: Service
           jsonPointers:
             - /spec/selector
       syncPolicy:
-        automated:                 # dev auto-syncs (fast iteration)
+        automated:
           prune: true
           selfHeal: false
           allowEmpty: false

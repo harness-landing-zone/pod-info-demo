@@ -1,0 +1,16 @@
+# AppProject: App Team One — STAGING Cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: appteamone-staging
+  namespace: gitops-preprod
+spec:
+  description: App Team One — staging namespace on the non-prod spoke
+  destinations:
+    - name: staging
+      namespace: podinfo-staging
+  sourceRepos:
+    - https://github.com/harness-landing-zone/pod-info-demo
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
