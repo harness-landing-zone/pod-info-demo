@@ -18,7 +18,7 @@ spec:
       name: 'appset-{{ .metadata.name }}'
     spec:
       # The appset-deploying Applications belong to the PLATFORM team's project.
-      project: platformteam
+      project: default
       source:
         repoURL: https://github.com/harness-landing-zone/pod-info-demo
         targetRevision: main
