@@ -16,6 +16,11 @@ spec:
       namespace: {{ .namespace }}
   sourceRepos:
     - {{ $.Values.repoURL | quote }}
+  # Allow the app to create its own namespace (CreateNamespace=true needs the
+  # cluster-scoped Namespace permitted); everything else stays namespaced.
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
   namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
