@@ -1,0 +1,11 @@
+# Drives the `appsets` Helm chart for the PROD tier (gitops-prod ArgoCD instance).
+argocdNamespace: gitops-prod
+repoURL: https://github.com/harness-landing-zone/pod-info-demo
+targetRevision: main
+service: appone
+environments:
+  - name: prod
+    namespace: podinfo-prod
+    project: appteamone-prod
+    valueFile: envs/prod.yaml
+    autoSync: false          # prod is manual (Harness pipeline gates promotion)

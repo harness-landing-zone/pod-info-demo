@@ -1,0 +1,22 @@
+{{- /* One AppProject per environment. sync-wave 0 so it exists before the ApplicationSet. */ -}}
+{{- range .Values.environments }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: {{ .project }}
+  namespace: {{ $.Values.argocdNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  description: {{ printf "App Team One — %s" .name | quote }}
+  # Locked to this env's cluster (secret name == .name) + namespace.
+  destinations:
+    - name: {{ .name }}
+      namespace: {{ .namespace }}
+  sourceRepos:
+    - {{ $.Values.repoURL | quote }}
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+{{- end }}

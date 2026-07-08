@@ -1,0 +1,14 @@
+# Defaults — real values come from applicationset/<tier>/values.yaml at deploy time.
+argocdNamespace: ""                                    # ArgoCD instance namespace (gitops-preprod | gitops-prod)
+repoURL: https://github.com/harness-landing-zone/pod-info-demo
+targetRevision: main
+service: appone                                        # Harness serviceRef label
+
+# One entry -> one ApplicationSet + one AppProject.
+# Assumes the spoke's cluster-secret name AND its `environment` label both equal `name`.
+environments: []
+#  - name: dev                 # env name = environment label = cluster-secret name
+#    namespace: podinfo-dev    # target namespace on the spoke
+#    project: appteamone-dev   # STATIC AppProject name (must be mapped in Harness)
+#    valueFile: envs/dev.yaml  # podinfo chart values file (repo-relative)
+#    autoSync: true            # false -> manual sync (e.g. prod)

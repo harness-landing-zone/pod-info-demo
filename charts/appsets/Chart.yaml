@@ -1,0 +1,9 @@
+apiVersion: v2
+name: appsets
+description: >-
+  Renders one ApplicationSet + one AppProject per environment with STATIC
+  (Helm-rendered) project names, so Harness can map each ApplicationSet to a
+  Harness project. Driven by a per-tier values file under applicationset/<tier>/.
+type: application
+version: 0.1.0
+appVersion: "1.0"

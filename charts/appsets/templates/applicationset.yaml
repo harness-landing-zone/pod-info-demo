@@ -1,0 +1,76 @@
+{{- /*
+One ApplicationSet per environment. `project` is Helm-rendered to a STATIC name so
+Harness maps the appset. The cluster generator's `{{ .name }}` must stay an ARGOCD
+template, so it is escaped from Helm with backtick quoting.
+*/ -}}
+{{- range .Values.environments }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: app-one-{{ .name }}
+  namespace: {{ $.Values.argocdNamespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    # Selects exactly this env's spoke by its `environment` label (Helm-rendered value).
+    - clusters:
+        selector:
+          matchLabels:
+            environment: {{ .name }}
+  template:
+    metadata:
+      name: podinfo-{{ .name }}
+      labels:
+        harness.io/serviceRef: {{ $.Values.service }}
+        harness.io/envRef: {{ .name }}
+        app: podinfo
+        environment: {{ .name }}
+    spec:
+      # STATIC project (Helm-rendered) -> Harness maps this ApplicationSet.
+      project: {{ .project }}
+      sources:
+        - repoURL: {{ $.Values.repoURL }}
+          targetRevision: {{ $.Values.targetRevision }}
+          path: chart
+          helm:
+            releaseName: podinfo-{{ .name }}
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - "$values/{{ .valueFile }}"
+            values: |
+              securityContext:
+                runAsUser: 100      # image 'app' user (uid 100); satisfies runAsNonRoot on k3d (no SCC)
+        - repoURL: {{ $.Values.repoURL }}
+          targetRevision: {{ $.Values.targetRevision }}
+          ref: values
+      destination:
+        # Escaped so Helm leaves it as an ArgoCD template = the matched cluster's name.
+        name: '{{`{{ .name }}`}}'
+        namespace: {{ .namespace }}
+      ignoreDifferences:
+        - group: ""
+          kind: Service
+          jsonPointers:
+            - /spec/selector
+      syncPolicy:
+        {{- if .autoSync }}
+        automated:
+          prune: true
+          selfHeal: false
+          allowEmpty: false
+        {{- end }}
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
+{{- end }}

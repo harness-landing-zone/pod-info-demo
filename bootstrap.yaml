@@ -1,3 +1,7 @@
+# PLATFORM BOOTSTRAP (non-prod) — runs on the gitops-preprod ArgoCD instance.
+# Deploys the `appsets` Helm chart into gitops-preprod, driven by
+# applicationset/preprod/values.yaml. The chart renders one ApplicationSet + one
+# AppProject per environment, each with a STATIC project so Harness maps them.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -8,35 +12,34 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
+    # Reads the tier values file so argocdNamespace drives the destination.
     - git:
         repoURL: https://github.com/harness-landing-zone/pod-info-demo
         revision: main
         files:
-          - path: applicationset/preprod/*.yaml
+          - path: applicationset/preprod/values.yaml
   template:
     metadata:
-      name: 'appset-{{ .metadata.name }}'
+      name: 'appsets-{{ .argocdNamespace }}'
     spec:
-      # The appset-deploying Applications belong to the PLATFORM team's project.
       project: default
-      source:
-        repoURL: https://github.com/harness-landing-zone/pod-info-demo
-        targetRevision: main
-        # .path.path = the matched file's directory (e.g. applicationset/preprod) — dynamic so the
-        # same template works for any subfolder.
-        path: '{{ .path.path }}'
-        directory:
-          recurse: false
-          # Deploy only this one file out of the folder.
-          include: '{{ .path.filename }}'
+      # Multi-source: the chart + the repo (as $values) for the external values file.
+      sources:
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          path: charts/appsets
+          helm:
+            valueFiles:
+              - '$values/applicationset/preprod/values.yaml'
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          ref: values
       destination:
         server: https://kubernetes.default.svc
-        # "Relevant namespace" = the namespace each appset declares in its metadata.
-        namespace: '{{ .metadata.namespace }}'
+        namespace: '{{ .argocdNamespace }}'
       syncPolicy:
         automated:
           prune: true
           selfHeal: true
         syncOptions:
-          - CreateNamespace=true
           - ServerSideApply=true

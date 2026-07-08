@@ -1,0 +1,17 @@
+# Drives the `appsets` Helm chart for the NON-PROD tier (gitops-preprod ArgoCD instance).
+# Add an environment here -> one more ApplicationSet + AppProject, no new YAML files.
+argocdNamespace: gitops-preprod
+repoURL: https://github.com/harness-landing-zone/pod-info-demo
+targetRevision: main
+service: appone
+environments:
+  - name: dev
+    namespace: podinfo-dev
+    project: appteamone-dev
+    valueFile: envs/dev.yaml
+    autoSync: true
+  - name: staging
+    namespace: podinfo-staging
+    project: appteamone-staging
+    valueFile: envs/staging.yaml
+    autoSync: true
