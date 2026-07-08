@@ -6,17 +6,24 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: app-one
+  name: app-one-prod
   namespace: gitops-prod
 spec:
   goTemplate: true
   goTemplateOptions:
     - missingkey=error
   generators:
-    - list:
-        elements:
-          - env: prod
-            namespace: podinfo-prod
+    # The CLUSTER is chosen by labels on its ArgoCD cluster Secret (environment=prod).
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  environment: prod
+          - list:
+              elements:
+                - env: prod
+                  namespace: podinfo-prod
   template:
     metadata:
       name: 'podinfo-{{ .env }}'
@@ -43,7 +50,9 @@ spec:
           targetRevision: main
           ref: values
       destination:
-        server: https://kubernetes.default.svc
+        # Cluster supplied by the clusters generator (the secret labeled environment=prod).
+        # .name is the registered cluster-secret name, so this survives k3d's ephemeral ports.
+        name: '{{ .name }}'
         namespace: '{{ .namespace }}'
       ignoreDifferences:
         - group: ""
@@ -51,9 +60,10 @@ spec:
           jsonPointers:
             - /spec/selector
       syncPolicy:
-        # NO automated block: prod is manual (Harness pipeline promotes). CreateNamespace off too
-        # (podinfo-prod is pre-created + managed-by gitops-prod).
+        # NO automated block: prod is manual (Harness pipeline promotes).
         syncOptions:
+          # podinfo-prod is NOT pre-created on the prod spoke, so let Argo create it.
+          - CreateNamespace=true
           - ServerSideApply=true
         retry:
           limit: 5

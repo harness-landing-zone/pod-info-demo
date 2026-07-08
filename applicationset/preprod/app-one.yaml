@@ -1,21 +1,27 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: app-one
+  name: app-one-np
   namespace: gitops-preprod
 spec:
   goTemplate: true
   goTemplateOptions:
     - missingkey=error
   generators:
-    - list:
-        elements:
-          - env: dev
-            namespace: podinfo-dev
-          - env: staging
-            namespace: podinfo-staging
-          - env: preprod
-            namespace: podinfo-preprod
+    # The CLUSTER is chosen by labels on its ArgoCD cluster Secret (environment=nonprod),
+    # not hardcoded. The inner list fans out the namespaces the non-prod tier runs on it.
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  environment: nonprod
+          - list:
+              elements:
+                - env: dev
+                  namespace: podinfo-dev
+                - env: staging
+                  namespace: podinfo-staging
   template:
     metadata:
       name: 'podinfo-{{ .env }}'
@@ -45,7 +51,9 @@ spec:
           targetRevision: main
           ref: values
       destination:
-        server: https://kubernetes.default.svc
+        # Cluster supplied by the clusters generator (the secret labeled environment=nonprod).
+        # .name is the registered cluster-secret name, so this survives k3d's ephemeral ports.
+        name: '{{ .name }}'
         namespace: '{{ .namespace }}'
       ignoreDifferences:
         # argo-rollouts injects rollouts-pod-template-hash into Service selectors at runtime.
