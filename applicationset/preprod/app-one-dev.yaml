@@ -1,0 +1,66 @@
+# app-one (DEV) — App Team One, non-prod tier, DEV cluster only.
+# Split from the combined non-prod appset so this appset has a STATIC project
+# (appteamone-dev) that Harness maps -> the ApplicationSet shows in the Harness
+# `appteamone` project. Cluster generator selects exactly the dev spoke by its label.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: app-one-dev
+  namespace: gitops-preprod
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            environment: dev
+  template:
+    metadata:
+      name: podinfo-dev
+      labels:
+        harness.io/serviceRef: appone
+        harness.io/envRef: dev
+        app: podinfo
+        environment: dev
+    spec:
+      project: appteamone-dev
+      sources:
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          path: chart
+          helm:
+            releaseName: podinfo-dev
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - '$values/envs/dev.yaml'
+            values: |
+              securityContext:
+                runAsUser: null
+        - repoURL: https://github.com/harness-landing-zone/pod-info-demo
+          targetRevision: main
+          ref: values
+      destination:
+        # .name = the matched cluster's registered secret name (dev).
+        name: '{{ .name }}'
+        namespace: podinfo-dev
+      ignoreDifferences:
+        - group: ""
+          kind: Service
+          jsonPointers:
+            - /spec/selector
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: false
+          allowEmpty: false
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 3m
