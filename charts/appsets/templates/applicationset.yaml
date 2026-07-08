@@ -31,7 +31,7 @@ spec:
         app: podinfo
         environment: {{ .name }}
     spec:
-      # STATIC project (Helm-rendered) -> Harness maps this ApplicationSet.
+      # Static AppProject name so Harness maps the appset to the project.
       project: {{ .project }}
       sources:
         - repoURL: {{ $.Values.repoURL }}
@@ -44,7 +44,7 @@ spec:
               - "$values/{{ .valueFile }}"
             values: |
               securityContext:
-                runAsUser: 100      # image 'app' user (uid 100); satisfies runAsNonRoot on k3d (no SCC)
+                runAsUser: 100
         - repoURL: {{ $.Values.repoURL }}
           targetRevision: {{ $.Values.targetRevision }}
           ref: values
