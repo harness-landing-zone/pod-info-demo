@@ -1,21 +1,24 @@
-{{- /* One AppProject per environment. sync-wave 0 so it exists before the ApplicationSet. */ -}}
-{{- range .Values.environments }}
----
+{{- /*
+ONE AppProject per tier (matches the per-tier ApplicationSet). sync-wave 0 so
+it exists before the ApplicationSet. Destination clusters are not enumerated:
+this ArgoCD instance only has this tier's spokes registered, so scoping is by
+namespace pattern (<appName>-*). Tighten to an explicit destination list if
+this instance ever manages more than this team's clusters.
+*/ -}}
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
-  name: {{ .project }}
-  namespace: {{ $.Values.argocdNamespace }}
+  name: {{ .Values.team }}-{{ .Values.tier }}
+  namespace: {{ .Values.argocdNamespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "0"
 spec:
-  description: {{ printf "App Team One — %s" .name | quote }}
-  # Locked to this env's cluster (secret name == .name) + namespace.
+  description: {{ printf "%s — %s tier" .Values.team .Values.tier | quote }}
   destinations:
-    - name: {{ .name }}
-      namespace: {{ .namespace }}
+    - name: '*'
+      namespace: '{{ .Values.appName }}-*'
   sourceRepos:
-    - {{ $.Values.repoURL | quote }}
+    - {{ .Values.repoURL | quote }}
   # Allow the app to create its own namespace (CreateNamespace=true needs the
   # cluster-scoped Namespace permitted); everything else stays namespaced.
   clusterResourceWhitelist:
@@ -24,4 +27,3 @@ spec:
   namespaceResourceWhitelist:
     - group: '*'
       kind: '*'
-{{- end }}

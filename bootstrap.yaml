@@ -1,7 +1,8 @@
 # PLATFORM BOOTSTRAP (non-prod) — runs on the gitops-preprod ArgoCD instance.
 # Deploys the `appsets` Helm chart into gitops-preprod, driven by
-# applicationset/preprod/values.yaml. The chart renders one ApplicationSet + one
-# AppProject per environment, each with a STATIC project so Harness maps them.
+# applicationset/preprod/values.yaml. The chart renders ONE ApplicationSet + ONE
+# AppProject for the whole tier; environments are derived from the cluster
+# secrets' environment/tier labels. Project name is STATIC so Harness maps it.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:

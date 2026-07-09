@@ -1,16 +1,21 @@
 # Defaults — real values come from applicationset/<tier>/values.yaml at deploy time.
-argocdNamespace: ""                                    # ArgoCD instance namespace (gitops-preprod | gitops-prod)
+#
+# ONE ApplicationSet + ONE AppProject per tier (= per ArgoCD instance).
+# Environments are NOT listed here: the cluster generator selects spokes by
+# their `tier` label and derives everything per-environment from the cluster
+# secret's `environment` label. Values files resolve per cluster as:
+#   envs/defaults.yaml -> envs/tiers/<tier>.yaml -> envs/<environment>.yaml
+#
+# Cluster secrets MUST carry `environment` and `tier` labels
+# (missingkey=error: an unlabeled secret fails generation — intentional).
+
+argocdNamespace: ""      # ArgoCD instance namespace (gitops-preprod | gitops-prod)
+tier: ""                 # nonprod | prod — cluster selector + AppProject suffix
+autoSync: true           # tier-level sync policy (prod tier: false, pipeline-gated)
+
 repoURL: https://github.com/harness-landing-zone/pod-info-demo
 targetRevision: main
-service: appone                                        # Harness serviceRef label
 
-# One entry -> one ApplicationSet + one AppProject.
-# Assumes the spoke's cluster-secret name AND its `environment` label both equal `name`.
-# Cluster secrets MUST carry `environment` and `tier` labels — the Application
-# template resolves its values files from them at ArgoCD time:
-#   envs/defaults.yaml -> envs/tiers/<tier>.yaml -> envs/<environment>.yaml
-environments: []
-#  - name: dev                 # env name = environment label = cluster-secret name
-#    namespace: podinfo-dev    # target namespace on the spoke
-#    project: appteamone-dev   # STATIC AppProject name (must be mapped in Harness)
-#    autoSync: true            # false -> manual sync (e.g. prod)
+appName: podinfo         # app/release/namespace prefix -> podinfo-<environment>
+service: appone          # Harness serviceRef label
+team: appteamone         # AppProject name prefix -> appteamone-<tier>

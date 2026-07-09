@@ -1,12 +1,10 @@
 # Drives the `appsets` Helm chart for the PROD tier (gitops-prod ArgoCD instance).
+# One ApplicationSet + one AppProject for the whole tier.
 argocdNamespace: gitops-prod
+tier: prod
+autoSync: false          # prod is manual (Harness pipeline gates promotion)
 repoURL: https://github.com/harness-landing-zone/pod-info-demo
 targetRevision: main
+appName: podinfo
 service: appone
-# Values files now resolve from cluster-secret labels (environment/tier):
-#   envs/defaults.yaml -> envs/tiers/prod.yaml -> envs/<environment>.yaml
-environments:
-  - name: prod
-    namespace: podinfo-prod
-    project: appteamone-prod
-    autoSync: false          # prod is manual (Harness pipeline gates promotion)
+team: appteamone

@@ -1,15 +1,17 @@
 {{- /*
-One ApplicationSet per environment. `project` is Helm-rendered to a STATIC name so
-Harness maps the appset. The cluster generator's `{{ .name }}` must stay an ARGOCD
-template, so it is escaped from Helm with backtick quoting.
+ONE ApplicationSet per tier (= per ArgoCD instance). Clusters are selected by
+their `tier` label; everything per-environment (app name, namespace, values
+files, envRef) is resolved at ArgoCD time from the matched cluster secret's
+`environment` label. Adding an environment = registering a labeled cluster
+secret + an envs/<env>.yaml file — no change here.
+`project` stays a STATIC name (per tier) so Harness maps the appset.
+ArgoCD templates are escaped from Helm with backtick quoting.
 */ -}}
-{{- range .Values.environments }}
----
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: app-one-{{ .name }}
-  namespace: {{ $.Values.argocdNamespace }}
+  name: {{ .Values.appName }}-{{ .Values.tier }}
+  namespace: {{ .Values.argocdNamespace }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
 spec:
@@ -17,57 +19,53 @@ spec:
   goTemplateOptions:
     - missingkey=error
   generators:
-    # Selects exactly this env's spoke by its `environment` label (Helm-rendered value).
     - clusters:
         selector:
           matchLabels:
-            environment: {{ .name }}
+            tier: {{ .Values.tier }}
   template:
     metadata:
-      name: podinfo-{{ .name }}
+      name: '{{ .Values.appName }}-{{`{{ .metadata.labels.environment }}`}}'
       labels:
-        harness.io/serviceRef: {{ $.Values.service }}
-        harness.io/envRef: {{ .name }}
-        app: podinfo
-        # From the matched cluster secret's labels (ArgoCD-time, escaped from Helm).
-        # Requires `environment` and `tier` labels on every spoke cluster secret.
+        harness.io/serviceRef: {{ .Values.service }}
+        harness.io/envRef: '{{`{{ .metadata.labels.environment }}`}}'
+        app: {{ .Values.appName }}
         environment: '{{`{{ .metadata.labels.environment }}`}}'
         tier: '{{`{{ .metadata.labels.tier }}`}}'
     spec:
-      # Static AppProject name so Harness maps the appset to the project.
-      project: {{ .project }}
+      # Static per-tier AppProject name so Harness maps the appset to the project.
+      project: {{ .Values.team }}-{{ .Values.tier }}
       sources:
-        - repoURL: {{ $.Values.repoURL }}
-          targetRevision: {{ $.Values.targetRevision }}
+        - repoURL: {{ .Values.repoURL }}
+          targetRevision: {{ .Values.targetRevision }}
           path: chart
           helm:
-            releaseName: podinfo-{{ .name }}
+            releaseName: '{{ .Values.appName }}-{{`{{ .metadata.labels.environment }}`}}'
             ignoreMissingValueFiles: true
-            # Layered values, resolved per matched cluster from its secret labels
-            # (ArgoCD templates, escaped from Helm). Later files override earlier.
-            # All layers are optional (ignoreMissingValueFiles) except the env one
-            # by convention — Harness UpdateReleaseRepo writes image.tag there.
+            # Layered values resolved per matched cluster from its secret labels.
+            # Later files override earlier. All layers optional except the env
+            # one by convention — Harness UpdateReleaseRepo writes image.tag there.
             valueFiles:
-              - "$values/envs/defaults.yaml"                                   
-              - "$values/envs/tiers/{{`{{ .metadata.labels.tier }}`}}.yaml" 
+              - "$values/envs/defaults.yaml"
+              - "$values/envs/tiers/{{`{{ .metadata.labels.tier }}`}}.yaml"
               - "$values/envs/{{`{{ .metadata.labels.environment }}`}}.yaml"
             values: |
               securityContext:
                 runAsUser: 100
-        - repoURL: {{ $.Values.repoURL }}
-          targetRevision: {{ $.Values.targetRevision }}
+        - repoURL: {{ .Values.repoURL }}
+          targetRevision: {{ .Values.targetRevision }}
           ref: values
       destination:
-        # Escaped so Helm leaves it as an ArgoCD template = the matched cluster's name.
+        # The matched cluster's registered name (secret `name` field).
         name: '{{`{{ .name }}`}}'
-        namespace: {{ .namespace }}
+        namespace: '{{ .Values.appName }}-{{`{{ .metadata.labels.environment }}`}}'
       ignoreDifferences:
         - group: ""
           kind: Service
           jsonPointers:
             - /spec/selector
       syncPolicy:
-        {{- if .autoSync }}
+        {{- if .Values.autoSync }}
         automated:
           prune: true
           selfHeal: false
@@ -82,4 +80,3 @@ spec:
             duration: 10s
             factor: 2
             maxDuration: 3m
-{{- end }}

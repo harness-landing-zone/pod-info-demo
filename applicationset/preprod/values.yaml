@@ -1,17 +1,12 @@
 # Drives the `appsets` Helm chart for the NON-PROD tier (gitops-preprod ArgoCD instance).
-# Add an environment here -> one more ApplicationSet + AppProject, no new YAML files.
+# One ApplicationSet + one AppProject for the whole tier. Adding an environment:
+# register the cluster secret with labels environment=<name>,tier=nonprod and
+# add envs/<name>.yaml — nothing to change in this file.
 argocdNamespace: gitops-preprod
+tier: nonprod
+autoSync: true
 repoURL: https://github.com/harness-landing-zone/pod-info-demo
 targetRevision: main
+appName: podinfo
 service: appone
-# Values files now resolve from cluster-secret labels (environment/tier):
-#   envs/defaults.yaml -> envs/tiers/nonprod.yaml -> envs/<environment>.yaml
-environments:
-  - name: dev
-    namespace: podinfo-dev
-    project: appteamone-dev
-    autoSync: true
-  - name: staging
-    namespace: podinfo-staging
-    project: appteamone-staging
-    autoSync: true
+team: appteamone
