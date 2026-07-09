@@ -1,0 +1,6 @@
+# Claude Code local settings
+.claude/
+
+# Karmada local install scripts + generated state (kubeconfigs, certs) — local-only
+karmada/scripts/
+karmada/.run/
