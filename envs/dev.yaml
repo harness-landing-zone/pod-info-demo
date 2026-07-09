@@ -1,11 +1,5 @@
-workload:
-  kind: Deployment
+# Layer 3/3 — dev environment. Only what differs from defaults + nonprod tier.
+# image.tag is written by the Harness UpdateReleaseRepo step — keep it here.
 image:
   tag: v0.1
 replicaCount: 4
-analysis:
-  enabled: false
-monitoring:
-  enabled: false
-ingress:
-  enabled: false

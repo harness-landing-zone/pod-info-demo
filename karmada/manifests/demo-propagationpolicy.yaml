@@ -1,0 +1,39 @@
+# Scope 2 — placement. Selects the member-cluster group by label (never by
+# cluster name, so cluster add/remove needs no manifest change) and divides
+# the region-total replica count across them.
+#
+# clusterTolerations: when a member goes NotReady/unreachable, Karmada taints
+# it; these tolerations expire after 30s and the workload's share is
+# rescheduled onto the surviving members. Default would be 300s — shortened
+# here so the failover demo is watchable.
+apiVersion: policy.karmada.io/v1alpha1
+kind: PropagationPolicy
+metadata:
+  name: podinfo-demo
+  namespace: karmada-demo
+spec:
+  resourceSelectors:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: podinfo-demo
+  propagateDeps: true
+  placement:
+    clusterAffinity:
+      labelSelector:
+        matchLabels:
+          infra_region: local1
+    clusterTolerations:
+      - key: cluster.karmada.io/not-ready
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+      - key: cluster.karmada.io/unreachable
+        operator: Exists
+        effect: NoExecute
+        tolerationSeconds: 30
+    replicaScheduling:
+      replicaSchedulingType: Divided
+      replicaDivisionPreference: Weighted
+      # equal weights across all matched clusters is the default; add
+      # weightPreference with per-cluster staticWeight here if you later want
+      # capacity-asymmetric DCs.

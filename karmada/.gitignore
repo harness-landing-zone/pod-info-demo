@@ -1,0 +1,3 @@
+# Generated at install time: certs, kubeconfigs, port-forward logs.
+# Contains credentials for the Karmada API and member clusters — never commit.
+.run/

@@ -6,9 +6,11 @@ service: appone                                        # Harness serviceRef labe
 
 # One entry -> one ApplicationSet + one AppProject.
 # Assumes the spoke's cluster-secret name AND its `environment` label both equal `name`.
+# Cluster secrets MUST carry `environment` and `tier` labels — the Application
+# template resolves its values files from them at ArgoCD time:
+#   envs/defaults.yaml -> envs/tiers/<tier>.yaml -> envs/<environment>.yaml
 environments: []
 #  - name: dev                 # env name = environment label = cluster-secret name
 #    namespace: podinfo-dev    # target namespace on the spoke
 #    project: appteamone-dev   # STATIC AppProject name (must be mapped in Harness)
-#    valueFile: envs/dev.yaml  # podinfo chart values file (repo-relative)
 #    autoSync: true            # false -> manual sync (e.g. prod)

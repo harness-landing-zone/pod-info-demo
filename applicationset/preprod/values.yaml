@@ -4,14 +4,14 @@ argocdNamespace: gitops-preprod
 repoURL: https://github.com/harness-landing-zone/pod-info-demo
 targetRevision: main
 service: appone
+# Values files now resolve from cluster-secret labels (environment/tier):
+#   envs/defaults.yaml -> envs/tiers/nonprod.yaml -> envs/<environment>.yaml
 environments:
   - name: dev
     namespace: podinfo-dev
     project: appteamone-dev
-    valueFile: envs/dev.yaml
     autoSync: true
   - name: staging
     namespace: podinfo-staging
     project: appteamone-staging
-    valueFile: envs/staging.yaml
     autoSync: true

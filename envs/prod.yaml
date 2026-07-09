@@ -1,20 +1,6 @@
-workload:
-  kind: Rollout
+# Layer 3/3 — prod environment. Only what differs from defaults + prod tier.
+# image.tag is written by the Harness UpdateReleaseRepo step — keep it here.
+# replicaCount kept explicit: an environment declares its own capacity.
 image:
   tag: v0.1
 replicaCount: 3
-rollout:
-  strategy:
-    canary:
-      steps:
-      - setWeight: 20
-      - pause: {}
-      - setWeight: 60
-      - pause: {}
-      - setWeight: 100
-analysis:
-  enabled: false
-monitoring:
-  enabled: false
-ingress:
-  enabled: false

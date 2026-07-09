@@ -1,0 +1,38 @@
+# Demo workload for Karmada Divided scheduling.
+# replicas is the REGION TOTAL — Karmada splits it across the member clusters
+# selected by the PropagationPolicy (expect 2/2/2 across dev/staging/prod).
+# Nothing cluster-specific is baked in: one manifest serves every member.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: karmada-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: podinfo-demo
+  namespace: karmada-demo
+  labels:
+    app: podinfo-demo
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: podinfo-demo
+  template:
+    metadata:
+      labels:
+        app: podinfo-demo
+    spec:
+      containers:
+        - name: podinfo
+          image: ghcr.io/stefanprodan/podinfo:6.7.1
+          ports:
+            - containerPort: 9898
+              name: http
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi

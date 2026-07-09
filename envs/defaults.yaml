@@ -1,0 +1,9 @@
+# Layer 1/3 — global defaults, applied to every environment on every cluster.
+# Overridden by envs/tiers/<tier>.yaml, then envs/<environment>.yaml.
+# Put values here only when they are true everywhere.
+analysis:
+  enabled: false
+monitoring:
+  enabled: false
+ingress:
+  enabled: false

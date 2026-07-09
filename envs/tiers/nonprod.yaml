@@ -1,0 +1,5 @@
+# Layer 2/3 — nonprod tier defaults (clusters labeled tier=nonprod: dev, staging).
+# Applies to every nonprod environment; envs/<environment>.yaml overrides per env.
+workload:
+  kind: Deployment
+replicaCount: 1

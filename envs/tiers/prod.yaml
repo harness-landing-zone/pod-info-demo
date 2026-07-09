@@ -1,0 +1,15 @@
+# Layer 2/3 — prod tier defaults (clusters labeled tier=prod).
+# Progressive delivery is a tier property: every prod-tier environment gets the
+# Rollout kind and the canary strategy; envs/<environment>.yaml overrides per env.
+workload:
+  kind: Rollout
+replicaCount: 3
+rollout:
+  strategy:
+    canary:
+      steps:
+        - setWeight: 20
+        - pause: {}
+        - setWeight: 60
+        - pause: {}
+        - setWeight: 100

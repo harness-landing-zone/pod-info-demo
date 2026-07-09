@@ -29,7 +29,10 @@ spec:
         harness.io/serviceRef: {{ $.Values.service }}
         harness.io/envRef: {{ .name }}
         app: podinfo
-        environment: {{ .name }}
+        # From the matched cluster secret's labels (ArgoCD-time, escaped from Helm).
+        # Requires `environment` and `tier` labels on every spoke cluster secret.
+        environment: '{{`{{ .metadata.labels.environment }}`}}'
+        tier: '{{`{{ .metadata.labels.tier }}`}}'
     spec:
       # Static AppProject name so Harness maps the appset to the project.
       project: {{ .project }}
@@ -40,8 +43,14 @@ spec:
           helm:
             releaseName: podinfo-{{ .name }}
             ignoreMissingValueFiles: true
+            # Layered values, resolved per matched cluster from its secret labels
+            # (ArgoCD templates, escaped from Helm). Later files override earlier.
+            # All layers are optional (ignoreMissingValueFiles) except the env one
+            # by convention — Harness UpdateReleaseRepo writes image.tag there.
             valueFiles:
-              - "$values/{{ .valueFile }}"
+              - "$values/envs/defaults.yaml"                                   
+              - "$values/envs/tiers/{{`{{ .metadata.labels.tier }}`}}.yaml" 
+              - "$values/envs/{{`{{ .metadata.labels.environment }}`}}.yaml"
             values: |
               securityContext:
                 runAsUser: 100
