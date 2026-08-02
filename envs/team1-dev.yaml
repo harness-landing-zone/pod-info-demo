@@ -1,5 +1,17 @@
 # Layer 3/3 — dev environment. Only what differs from defaults + nonprod tier.
 # image.tag is written by the Harness UpdateReleaseRepo step — keep it here.
+#
+# v0.3 set BY HAND as a diagnostic, not by the pipeline: v0.1 crash-loops in
+# team1-dev (4 pods, CrashLoopBackOff, Deployment past its progress deadline) and
+# neither runAsUser nor readOnlyRootFilesystem changed that. Bumping the tag on
+# its own isolates one variable - if v0.3 comes up Healthy the image build was
+# the fault; if it still crashes the cause is environmental, and the prime
+# suspect is the amazon-cloudwatch-observability EKS addon (terraform/eks-hub/
+# eks.tf:95), whose ADOT operator injects four auto-instrumentation containers
+# into this pod that the chart never asked for.
+#
+# Deliberately changed only in DEV. team1-prod stays on its own tag so the two
+# environments do not move together while we are still diagnosing.
 image:
-  tag: v0.1
+  tag: v0.3
 replicaCount: 4
