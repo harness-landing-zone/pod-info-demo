@@ -1,0 +1,38 @@
+# Drives the `appsets` chart for tenant team1 on its OWN self-managed Argo CD
+# (agent team1_argo_agent, PROJECT scope, Harness gitopsdemo/selfmanagedargo).
+#
+# One ApplicationSet, two Applications, one destination. Adding an environment
+# means adding an entry below AND an envs/<env>.yaml file AND the matching
+# Harness environment - plus the namespace must already be in the platform's
+# workloadNamespaces, or both walls reject the sync.
+
+# The tenant's Argo CD instance namespace - where Applications live.
+argocdNamespace: team1-argo
+
+# The PLATFORM-owned AppProject, mapped to gitopsdemo/selfmanagedargo. Created by
+# hub-orchestrator's tenant-platform chart, never by this one.
+project: team1
+
+# The registered cluster Secret NAME (not a server URL). The tenant's argocd-cm
+# sets cluster.inClusterEnabled "false", so this declared, namespace-restricted
+# destination is the only one that exists.
+destinationCluster: team1-in-cluster
+
+repoURL: https://github.com/harness-landing-zone/pod-info-demo
+targetRevision: main
+
+appName: podinfo
+# Harness service IDENTIFIER, created in gitopsdemo/selfmanagedargo.
+service: podinfo
+team: team1
+
+# env must equal the Harness environment NAME and the target namespace;
+# envRef must equal the Harness environment IDENTIFIER. They differ by
+# hyphen-vs-underscore and mixing them up breaks the pipeline linkage silently.
+environments:
+  - env: team1-dev
+    envRef: team1_dev
+    tier: nonprod
+  - env: team1-prod
+    envRef: team1_prod
+    tier: prod

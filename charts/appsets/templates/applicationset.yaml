@@ -1,78 +1,102 @@
 {{- /*
-ONE ApplicationSet per tier (= per ArgoCD instance). Clusters are selected by
-their `tier` label; everything per-environment (app name, namespace, values
-files, envRef) is resolved at ArgoCD time from the matched cluster secret's
-`environment` label. Adding an environment = registering a labeled cluster
-secret + an envs/<env>.yaml file — no change here.
-`project` stays a STATIC name (per tier) so Harness maps the appset.
+ONE ApplicationSet for the tenant: one Application per environment, all of them
+landing on the SINGLE registered destination (team1-in-cluster).
+
+A LIST GENERATOR, NOT A CLUSTERS GENERATOR - and that is forced, not taste. This
+tenant's Argo has exactly one cluster Secret (team1-in-cluster, authored by the
+platform's tenant-platform chart) and it serves BOTH workload namespaces. A
+clusters generator emits one Application PER MATCHED CLUSTER, so it could never
+yield two environments here. Worse, that Secret carries no `environment` or
+`tier` label, and with goTemplateOptions missingkey=error, reading
+.metadata.labels.environment off it fails generation OUTRIGHT rather than
+degrading. Environments are therefore data in values, not cluster labels.
+
+NO syncPolicy.automated, DELIBERATELY. The Harness pipeline is the promoter for
+every environment - each stage runs UpdateReleaseRepo -> MergePR -> GitOpsSync -
+so an automated sync would race the canary and make the GitOps Sync step
+meaningless as a control point. This preserves the decision the tenant's previous
+Application already carried.
+
+`project` is the PLATFORM-OWNED AppProject team1, the one mapped to Harness
+gitopsdemo/selfmanagedargo. This chart deliberately creates NO AppProject: a
+tenant minting its own would be the tenant authoring its own wall, and an
+Application filed under any other project is invisible to the pipeline.
+
 ArgoCD templates are escaped from Helm with backtick quoting.
 */ -}}
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: {{ .Values.appName }}-{{ .Values.tier }}
+  name: {{ .Values.appName }}-{{ .Values.team }}
   namespace: {{ .Values.argocdNamespace }}
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
 spec:
   goTemplate: true
   goTemplateOptions:
     - missingkey=error
   generators:
-    - clusters:
-        selector:
-          matchLabels:
-            tier: {{ .Values.tier }}
+    - list:
+        elements:
+          {{- toYaml .Values.environments | nindent 10 }}
   template:
     metadata:
-      name: '{{ .Values.appName }}-{{`{{ .metadata.labels.environment }}`}}'
+      name: '{{ .Values.appName }}-{{`{{ .env }}`}}'
       labels:
+        {{- /* These two MUST be the Harness service and environment
+        IDENTIFIERS (podinfo, team1_dev / team1_prod), not display names. They
+        are what links each generated Application to its Harness service and
+        environment so the pipeline can resolve it. */}}
         harness.io/serviceRef: {{ .Values.service }}
-        harness.io/envRef: '{{`{{ .metadata.labels.environment }}`}}'
+        harness.io/envRef: '{{`{{ .envRef }}`}}'
         app: {{ .Values.appName }}
-        environment: '{{`{{ .metadata.labels.environment }}`}}'
-        tier: '{{`{{ .metadata.labels.tier }}`}}'
+        environment: '{{`{{ .env }}`}}'
+        team: {{ .Values.team }}
     spec:
-      # Static per-tier AppProject name so Harness maps the appset to the project.
-      project: {{ .Values.team }}-{{ .Values.tier }}
+      project: {{ .Values.project }}
+      {{- /* Multi-source: the chart is one source, the same repo mounted as
+      `values` is the other. valueFiles cannot climb out of the chart directory
+      on a single source, so the $values ref is what lets envs/ live at the repo
+      root and stay pipeline-editable without touching the chart. */}}
       sources:
         - repoURL: {{ .Values.repoURL }}
           targetRevision: {{ .Values.targetRevision }}
           path: chart
           helm:
-            releaseName: '{{ .Values.appName }}-{{`{{ .metadata.labels.environment }}`}}'
+            releaseName: '{{ .Values.appName }}-{{`{{ .env }}`}}'
             ignoreMissingValueFiles: true
-            # Layered values resolved per matched cluster from its secret labels.
-            # Later files override earlier. All layers optional except the env
-            # one by convention — Harness UpdateReleaseRepo writes image.tag there.
+            {{- /* Layered, last wins: global -> tier -> environment. The env
+            file is the one GitOpsUpdateReleaseRepo rewrites image.tag in, so its
+            NAME must match the Harness environment name - the service's
+            ReleaseRepo path is envs/<+env.name>.yaml and the two must agree. */}}
             valueFiles:
               - "$values/envs/defaults.yaml"
-              - "$values/envs/tiers/{{`{{ .metadata.labels.tier }}`}}.yaml"
-              - "$values/envs/{{`{{ .metadata.labels.environment }}`}}.yaml"
-            values: |
-              securityContext:
-                runAsUser: 100
+              - "$values/envs/tiers/{{`{{ .tier }}`}}.yaml"
+              - "$values/envs/{{`{{ .env }}`}}.yaml"
         - repoURL: {{ .Values.repoURL }}
           targetRevision: {{ .Values.targetRevision }}
           ref: values
       destination:
-        # The matched cluster's registered name (secret `name` field).
-        name: '{{`{{ .name }}`}}'
-        namespace: '{{ .Values.appName }}-{{`{{ .metadata.labels.environment }}`}}'
+        {{- /* BY NAME, not by server. The tenant's argocd-cm sets
+        cluster.inClusterEnabled "false", so the implicit in-cluster destination
+        does not exist. The only destination is this declared, restricted Secret,
+        and AppProject team1 lists its destinations by that name too - so a
+        server-form destination is rejected at admission. */}}
+        name: {{ .Values.destinationCluster }}
+        namespace: '{{`{{ .env }}`}}'
       ignoreDifferences:
+        {{- /* argo-rollouts rewrites the stable/canary Service selectors during
+        a rollout; without this every canary reports the app OutOfSync. */}}
         - group: ""
           kind: Service
           jsonPointers:
             - /spec/selector
       syncPolicy:
-        {{- if .Values.autoSync }}
-        automated:
-          prune: true
-          selfHeal: false
-          allowEmpty: false
-        {{- end }}
         syncOptions:
-          - CreateNamespace=true
+          {{- /* FALSE, and it has to be. The cluster Secret sets
+          clusterResources "false" and AppProject team1 has
+          clusterResourceWhitelist: [], so creating a Namespace is denied at two
+          independent walls. team1-platform pre-creates team1-dev and team1-prod
+          at sync wave 0. */}}
+          - CreateNamespace=false
           - ServerSideApply=true
         retry:
           limit: 5

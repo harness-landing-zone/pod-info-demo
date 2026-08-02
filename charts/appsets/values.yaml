@@ -1,21 +1,39 @@
-# Defaults — real values come from applicationset/<tier>/values.yaml at deploy time.
+# Defaults - real values come from applicationset/<tenant>/values.yaml at deploy
+# time.
 #
-# ONE ApplicationSet + ONE AppProject per tier (= per ArgoCD instance).
-# Environments are NOT listed here: the cluster generator selects spokes by
-# their `tier` label and derives everything per-environment from the cluster
-# secret's `environment` label. Values files resolve per cluster as:
-#   envs/defaults.yaml -> envs/tiers/<tier>.yaml -> envs/<environment>.yaml
+# ONE ApplicationSet for the tenant; one Application per entry in `environments`.
+# All of them target the same registered cluster and differ only by namespace,
+# because a self-managed tenant instance has exactly ONE destination Secret
+# serving all of its workload namespaces.
 #
-# Cluster secrets MUST carry `environment` and `tier` labels
-# (missingkey=error: an unlabeled secret fails generation — intentional).
+# NO AppProject IS CREATED HERE, on purpose. It is platform-owned (the
+# hub-orchestrator tenant-platform chart) and it is the object mapped to a
+# Harness project. A tenant that mints its own AppProject is a tenant writing its
+# own wall, and Applications filed under an unmapped project are invisible to the
+# pipeline.
 
-argocdNamespace: ""      # ArgoCD instance namespace (gitops-preprod | gitops-prod)
-tier: ""                 # nonprod | prod — cluster selector + AppProject suffix
-autoSync: true           # tier-level sync policy (prod tier: false, pipeline-gated)
+argocdNamespace: ""        # tenant Argo CD instance namespace (e.g. team1-argo)
+project: ""                # platform-owned AppProject to file Applications under
+destinationCluster: ""     # registered cluster Secret NAME (e.g. team1-in-cluster)
 
 repoURL: https://github.com/harness-landing-zone/pod-info-demo
 targetRevision: main
 
-appName: podinfo         # app/release/namespace prefix -> podinfo-<environment>
-service: appone          # Harness serviceRef label
-team: appteamone         # AppProject name prefix -> appteamone-<tier>
+appName: podinfo           # Application + Helm release prefix -> podinfo-<env>
+service: ""                # Harness service IDENTIFIER (harness.io/serviceRef)
+team: ""                   # label value + ApplicationSet name suffix
+
+# One entry per environment; each becomes exactly one Application.
+#
+#   env     Harness environment NAME. It does triple duty: the target NAMESPACE,
+#           the envs/<env>.yaml values file, and the Application name suffix.
+#           The Harness service's ReleaseRepo path is envs/<+env.name>.yaml, so
+#           if these drift the pipeline writes image.tag into a file the
+#           Application never reads - a silent no-op deploy.
+#   envRef  Harness environment IDENTIFIER, used for the harness.io/envRef label.
+#           Note it is NOT the same string as env (underscores vs hyphens).
+#   tier    selects the envs/tiers/<tier>.yaml layer.
+#
+# Empty by default so a missing tenant values file renders nothing rather than
+# silently generating an unscoped Application.
+environments: []
