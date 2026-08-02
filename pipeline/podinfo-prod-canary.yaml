@@ -1,0 +1,287 @@
+# PROGRESSIVE DELIVERY PIPELINE - Argo Rollouts canary into team1-prod, with
+# Harness driving every promotion.
+#
+# WHY THIS ONE HAS ROLLOUT STEPS AND THE DEV ONE DOES NOT: the workload KIND is
+# a tier property. envs/tiers/prod.yaml sets workload.kind: Rollout and defines
+# the canary; envs/tiers/nonprod.yaml sets Deployment. Same chart, same
+# ApplicationSet, different object - so only this environment has a Rollout for
+# GitOpsRollout to act on.
+#
+# THE STEP LADDER MUST MATCH THE CANARY. envs/tiers/prod.yaml declares:
+#   setWeight: 20
+#   pause: {}        <-- indefinite. Waits for an external resume.
+#   setWeight: 60
+#   pause: {}        <-- indefinite.
+#   setWeight: 100
+# TWO indefinite pauses means TWO resume actions. `pause: {}` with no duration
+# is deliberate: a durational pause expires on its own and the pipeline stops
+# being the control point. Harness's own canary+CV example uses `pause: {}` at
+# every step for exactly this reason (argo-rollouts-with-cv.md:56-119,151-153:
+# "Each pause: {} step is where your Verify step will validate the canary").
+# Change the steps in that file and the number of GitOpsRollout steps here must
+# change with them - nothing validates this pairing.
+#
+# THE SYNC STEP DELIBERATELY OMITS autoPromoteRolloutBehavior. Its schema enum
+# is only ["promote-full", "resume"] - there is NO "none" - so the only way to
+# let the rollout stop at its first pause is to leave the field out. Setting
+# promote-full here (as an earlier draft of this pipeline did) drives the
+# rollout straight to 100% on sync and every gate below becomes decorative:
+# green steps, full deploy, no canary.
+#
+# RBAC THIS DEPENDS ON: the resume/promote actions are executed by argocd-server,
+# not the application controller, and the base tenant Role leaves argocd-server
+# read-only. rolloutActions.enabled: true in the tenant values adds patch on
+# argoproj.io rollouts (+/status) in team1-dev and team1-prod. Without it every
+# WAIT passes and the first ACTION fails with 403.
+#
+# FEATURE FLAG: GitOps Rollout steps require CDS_GITOPS_ENABLE_ROLLOUTS_PIPELINE_UX
+# on the account (managing-rollouts-in-harness-pipelines.md:223-225). Verify it
+# is enabled before blaming this YAML.
+#
+# NOT A CONTROL YOU HAVE HERE: Deployment Freeze does NOT apply to GitOps PR
+# pipelines - stated verbatim in deployment-freeze.md:11. For a production
+# change-freeze use ArgoCD Sync Windows on the AppProject, or an OPA policy on
+# the GitOps Application.
+#
+# PREREQUISITE, currently OPEN: service `podinfo` still has no ReleaseRepo
+# manifest (no connector in this project reaches github.com/harness-landing-zone),
+# so Update Release Repo has no file to edit yet.
+pipeline:
+  name: Podinfo Prod Canary
+  identifier: podinfo_prod_canary
+  projectIdentifier: selfmanagedargo
+  orgIdentifier: gitopsdemo
+  description: >-
+    Canary-deploy podinfo into team1-prod through the tenant's own Argo CD using
+    Argo Rollouts. Harness bumps the tag in git, syncs, then resumes each
+    indefinite pause: 20% -> 60% -> 100%.
+  tags:
+    tenant: team1
+    pattern: progressive-delivery
+  variables:
+    - name: image_tag
+      type: String
+      description: Image tag to canary into team1-prod.
+      required: true
+      value: <+input>
+  stages:
+    # Approval as its OWN stage between deploys is the documented pattern -
+    # adding-harness-approval-stages.md:13 ("Approvals are added in between
+    # Stages") and :27-28 (never run approvals in parallel with other steps).
+    - stage:
+        name: Approval
+        identifier: approval
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: HarnessApproval
+                  name: Approve Prod Canary
+                  identifier: approveProdCanary
+                  timeout: 1d
+                  spec:
+                    approvalMessage: >-
+                      Approve canary of podinfo <+pipeline.variables.image_tag>
+                      into team1-prod. Promotion gates follow at 20% and 60%.
+                    includePipelineExecutionHistory: true
+                    isAutoRejectEnabled: false
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+                      userGroups:
+                        - account._account_all_users
+                    approverInputs: []
+    - stage:
+        name: Prod Canary
+        identifier: prod_canary
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          gitOpsEnabled: true
+          service:
+            serviceRef: podinfo
+          environment:
+            environmentRef: team1_prod
+            deployToAll: false
+            gitOpsClusters:
+              - identifier: team1incluster
+                agentIdentifier: team1_argo_agent
+          execution:
+            steps:
+              - step:
+                  type: GitOpsUpdateReleaseRepo
+                  name: Update Image Tag
+                  identifier: updateReleaseRepo
+                  timeout: 10m
+                  spec:
+                    variables:
+                      - name: image.tag
+                        type: String
+                        value: <+pipeline.variables.image_tag>
+                    prTitle: "podinfo team1-prod -> <+pipeline.variables.image_tag>"
+                    allowEmptyCommit: true
+              - step:
+                  type: MergePR
+                  name: Merge PR
+                  identifier: mergePR
+                  timeout: 10m
+                  spec:
+                    deleteSourceBranch: true
+                    mergeStrategy: merge
+              - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec:
+                    filterByServiceEnvCluster: true
+              - step:
+                  type: GitOpsSync
+                  name: Sync (starts canary at 20%)
+                  identifier: gitopsSync
+                  timeout: 10m
+                  spec:
+                    # FALSE on purpose. waitTillHealthy would block until the
+                    # Application is Healthy, but a Rollout parked on an
+                    # indefinite pause reports Suspended/Progressing and never
+                    # becomes Healthy until promoted. The rollout steps below
+                    # are what wait, on the correct condition.
+                    waitTillHealthy: false
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    retry: false
+                    retryStrategy: {}
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    failOnTimeout: true
+                    applicationsList:
+                      - applicationName: podinfo-team1-prod
+                        agentId: team1_argo_agent
+                  # NOTE: no autoPromoteRolloutBehavior. See the header.
+              - step:
+                  type: Wait
+                  name: Soak at 20 Percent
+                  identifier: soakAt20
+                  spec:
+                    duration: 2m
+              - step:
+                  type: GitOpsRollout
+                  name: Promote to 60 Percent
+                  identifier: promoteTo60
+                  timeout: 15m
+                  spec:
+                    # Explicit values, all confirmed against live state. The
+                    # Rollout is named `podinfo` in EVERY environment because
+                    # the chart's fullname helper ignores the release name, so
+                    # this does not vary per env - only the namespace does.
+                    # Portable alternative if these ever drift:
+                    #   appName: <+execution.steps.gitopsSync.gitops.discoveredRollouts[0].appName>
+                    #   namespace: <+execution.steps.gitopsSync.gitops.discoveredRollouts[0].namespace>
+                    #   rolloutName: <+execution.steps.gitopsSync.gitops.discoveredRollouts[0].rolloutName>
+                    appName: podinfo-team1-prod
+                    agentIdentifier: team1_argo_agent
+                    namespace: team1-prod
+                    rolloutName: podinfo
+                    # Wait for the rollout to actually be parked on the pause
+                    # before acting - resuming a rollout that has not reached
+                    # its pause yet is a no-op that looks like success.
+                    waitUntilHealthStatus:
+                      healthStatus: Suspended
+                    # `resume` advances past ONE pause -> setWeight 60.
+                    # promote-full here would skip the second gate entirely.
+                    autoRolloutAction: resume
+              - step:
+                  type: Wait
+                  name: Soak at 60 Percent
+                  identifier: soakAt60
+                  spec:
+                    duration: 2m
+              - step:
+                  type: GitOpsRollout
+                  name: Promote to 100 Percent
+                  identifier: promoteTo100
+                  timeout: 15m
+                  spec:
+                    appName: podinfo-team1-prod
+                    agentIdentifier: team1_argo_agent
+                    namespace: team1-prod
+                    rolloutName: podinfo
+                    waitUntilHealthStatus:
+                      healthStatus: Suspended
+                    # Final gate: take it all the way to stable.
+                    autoRolloutAction: promote-full
+            rollbackSteps:
+              # ABORT FIRST, then revert git. This is the order Harness's own
+              # canary+CV example uses (argo-rollouts-with-cv.md:1012-1055):
+              # GitOpsRollout abort -> RevertPR -> GitOpsSync. Reverting git
+              # alone leaves the canary parked at its current weight until
+              # something re-syncs; abort returns traffic to the stable
+              # ReplicaSet immediately, then git is corrected so the next sync
+              # does not re-apply the bad tag.
+              - step:
+                  type: GitOpsRollout
+                  name: Abort Rollout
+                  identifier: abortRollout
+                  timeout: 10m
+                  spec:
+                    appName: podinfo-team1-prod
+                    agentIdentifier: team1_argo_agent
+                    namespace: team1-prod
+                    rolloutName: podinfo
+                    autoRolloutAction: abort
+              - step:
+                  type: RevertPR
+                  name: Revert PR
+                  identifier: revertPR
+                  timeout: 10m
+                  spec:
+                    commitId: <+pipeline.stages.prod_canary.spec.execution.steps.updateReleaseRepo.updateReleaseRepoOutcome.commitId>
+              - step:
+                  type: MergePR
+                  name: Merge Revert PR
+                  identifier: mergeRevertPR
+                  timeout: 10m
+                  spec:
+                    deleteSourceBranch: true
+                    mergeStrategy: merge
+              - step:
+                  type: GitOpsSync
+                  name: Sync Rollback
+                  identifier: syncRollback
+                  timeout: 10m
+                  spec:
+                    waitTillHealthy: false
+                    prune: false
+                    dryRun: false
+                    applyOnly: false
+                    forceApply: false
+                    retry: false
+                    retryStrategy: {}
+                    syncOptions:
+                      skipSchemaValidation: false
+                      autoCreateNamespace: false
+                      pruneResourcesAtLast: false
+                      applyOutOfSyncOnly: false
+                      replaceResources: false
+                      prunePropagationPolicy: foreground
+                      respectIgnoreDifferences: false
+                      serverSideApply: false
+                    applicationsList:
+                      - applicationName: podinfo-team1-prod
+                        agentId: team1_argo_agent
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
