@@ -1,6 +1,37 @@
 # Layer 1/3 — global defaults, applied to every environment on every cluster.
 # Overridden by envs/tiers/<tier>.yaml, then envs/<environment>.yaml.
 # Put values here only when they are true everywhere.
+
+# MUST MATCH THE IMAGE, and this is not cosmetic - getting it wrong is a crash
+# loop, not a warning. docker.io/mkandylis/podinfo is built as:
+#
+#   RUN addgroup -S app && adduser -S -G app app   -> Alpine system user, UID 100
+#   WORKDIR /home/app
+#   COPY /podinfo/bin/podinfo .
+#   RUN chown -R app:app ./                        -> /home/app owned by UID 100
+#   USER app
+#   CMD ["./podinfo"]
+#
+# The chart's own default is runAsUser: 10001 with readOnlyRootFilesystem: true
+# and NO writable volume anywhere. Under that combination podinfo starts, cannot
+# create its data directory under /home/app (wrong UID *and* a read-only
+# filesystem), and exits - four pods in CrashLoopBackOff with a Deployment stuck
+# on "exceeded its progress deadline". The image pulls fine, so it does not look
+# like a permissions problem from the outside.
+#
+# These two keys merge over the chart's securityContext map; runAsNonRoot,
+# allowPrivilegeEscalation and capabilities.drop all still apply, so this stays
+# well inside the namespace's baseline Pod Security Admission level.
+#
+# HARDENING FOLLOW-UP: the better fix is to keep readOnlyRootFilesystem: true and
+# mount an emptyDir at podinfo's data path, but chart/templates/deployment.yaml
+# and rollout.yaml declare no volumes at all, so that needs a template change in
+# both. Do that before this pattern is copied to anything real.
+securityContext:
+  runAsUser: 100
+  runAsGroup: 100
+  readOnlyRootFilesystem: false
+
 analysis:
   enabled: false
 monitoring:
