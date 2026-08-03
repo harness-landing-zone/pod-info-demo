@@ -2,35 +2,33 @@
 # Overridden by envs/tiers/<tier>.yaml, then envs/<environment>.yaml.
 # Put values here only when they are true everywhere.
 
-# MUST MATCH THE IMAGE, and this is not cosmetic - getting it wrong is a crash
-# loop, not a warning. docker.io/mkandylis/podinfo is built as:
+# RULED OUT — do not re-add a securityContext override on this rung.
 #
-#   RUN addgroup -S app && adduser -S -G app app   -> Alpine system user, UID 100
-#   WORKDIR /home/app
-#   COPY /podinfo/bin/podinfo .
-#   RUN chown -R app:app ./                        -> /home/app owned by UID 100
-#   USER app
-#   CMD ["./podinfo"]
+# This file used to pin runAsUser: 100 / runAsGroup: 100 /
+# readOnlyRootFilesystem: false, on the theory that the chart's hardened
+# defaults (runAsUser: 10001, readOnlyRootFilesystem: true, no writable volume)
+# were what crash-looped podinfo. That was wrong — and because this rung applies
+# everywhere, it silently de-hardened team1-prod as well as team1-dev.
 #
-# The chart's own default is runAsUser: 10001 with readOnlyRootFilesystem: true
-# and NO writable volume anywhere. Under that combination podinfo starts, cannot
-# create its data directory under /home/app (wrong UID *and* a read-only
-# filesystem), and exits - four pods in CrashLoopBackOff with a Deployment stuck
-# on "exceeded its progress deadline". The image pulls fine, so it does not look
-# like a permissions problem from the outside.
+# The real cause was CPU ARCHITECTURE. docker.io/mkandylis/podinfo v0.1, v0.2
+# and v0.3 are all the SAME digest and all linux/arm64 only, while the EKS nodes
+# are amd64 — so the kernel could not exec the binary at all:
 #
-# These two keys merge over the chart's securityContext map; runAsNonRoot,
-# allowPrivilegeEscalation and capabilities.drop all still apply, so this stays
-# well inside the namespace's baseline Pod Security Admission level.
+#   exec ./podinfo: exec format error
 #
-# HARDENING FOLLOW-UP: the better fix is to keep readOnlyRootFilesystem: true and
-# mount an emptyDir at podinfo's data path, but chart/templates/deployment.yaml
-# and rollout.yaml declare no volumes at all, so that needs a template change in
-# both. Do that before this pattern is copied to anything real.
-securityContext:
-  runAsUser: 100
-  runAsGroup: 100
-  readOnlyRootFilesystem: false
+# Every securityContext experiment was therefore run against a binary that could
+# never start, and none of them could have come up Healthy no matter what was
+# set. Fixed by v0.4, a real multi-arch (amd64 + arm64) manifest.
+#
+# Re-verified after the fix, running the amd64 image directly:
+#   --read-only               -> starts, serves HTTP
+#   --user 10001              -> starts, serves HTTP
+#   --read-only --user 10001  -> starts, serves HTTP
+#
+# So the chart's hardened defaults are correct and are deliberately left in
+# force. podinfo is started with `--port` and `--level` only; the write paths
+# behind /store are unused here, which is why a read-only root filesystem costs
+# nothing.
 
 analysis:
   enabled: false
