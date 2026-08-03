@@ -13,6 +13,48 @@ image:
                          # and the pipeline's Update Release Repo bumps image.tag per env
   pullPolicy: IfNotPresent
 
+# Extra flags appended to `./podinfo --port=9898 --level=info`.
+#
+# THIS IS THE FAILURE-REHEARSAL HOOK. A verification gate you have never seen
+# fail is a gate you do not know works, and podinfo ships the switches to prove
+# it without needing a deliberately broken image:
+#
+#   --random-error        1 in 3 responses becomes a 5xx  -> error-rate anomaly
+#   --random-delay        0-5s injected latency           -> latency anomaly
+#   --stress-cpu=1        pins a core                     -> saturation
+#   --unready             never becomes ready             -> rollout stalls, no CV
+#
+# Set it on ONE environment at a time, in that environment's env file, and
+# remove it once the rehearsal is done. Leaving --random-error on a rung that
+# applies everywhere would fail every future canary and teach the team to
+# ignore the gate - which is worse than having no gate at all.
+extraArgs: []
+
+# Synthetic traffic, so Continuous Verification has something real to analyse.
+#
+# OFF by default - turn it on only where there is no real traffic. See the long
+# comment in templates/loadgen.yaml for why this is a prerequisite rather than a
+# convenience, and why it must hit BOTH Services.
+#
+# canaryPath is the failure-rehearsal switch:
+#   /            normal - canary and stable both look healthy
+#   /status/500  canary returns 5xx, stable does not, probes unaffected
+loadgen:
+  enabled: false
+  replicaCount: 1
+  # busybox has wget and nothing else; no shell utilities we do not need.
+  image: busybox:1.36
+  stablePath: /
+  canaryPath: /
+  intervalSeconds: 1
+  resources:
+    requests:
+      cpu: 5m
+      memory: 16Mi
+    limits:
+      cpu: 50m
+      memory: 32Mi
+
 service:
   port: 9898
   targetPort: 9898

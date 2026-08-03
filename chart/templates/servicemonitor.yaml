@@ -1,17 +1,59 @@
 {{- if .Values.monitoring.enabled }}
+{{- /*
+ONE ServiceMonitor PER SERVICE, and the canary one is the whole point.
+
+Canary CV compares the NEW pods against the STABLE pods, so Prometheus has to be
+scraping BOTH. Argo Rollouts injects `rollouts-pod-template-hash` into each
+Service's selector during a rollout, so at 20% traffic:
+
+    podinfo         -> stable pods
+    podinfo-canary  -> canary pods
+
+A single ServiceMonitor matching `role: stable` therefore scrapes the stable
+side ONLY. Verification then has no canary series to compare against, and the
+failure is SILENT - the Verify step sees no canary data rather than raising an
+error that names the cause.
+
+(That selector injection is also why the Application carries an
+ignoreDifferences entry for Service /spec/selector: the selector in git never
+matches the live one.)
+
+The `role` label lives on the SERVICE, not on the pods, which is what makes this
+work - ServiceMonitor selectors match Services. Scrape both and stamp each
+series with its role so a query can tell them apart:
+
+    podinfo_http_requests_total{role="canary"}  vs  {role="stable"}
+
+Only the Rollout workload has a canary Service; a plain Deployment (dev) gets
+the stable one alone.
+*/}}
+{{- $roles := list "stable" }}
+{{- if eq .Values.workload.kind "Rollout" }}
+{{- $roles = list "stable" "canary" }}
+{{- end }}
+{{- range $role := $roles }}
+---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "podinfo.fullname" . }}
+  name: {{ include "podinfo.fullname" $ }}-{{ $role }}
   labels:
-    {{- include "podinfo.labels" . | nindent 4 }}
+    {{- include "podinfo.labels" $ | nindent 4 }}
+    role: {{ $role }}
 spec:
   selector:
     matchLabels:
-      {{- include "podinfo.selectorLabels" . | nindent 6 }}
-      role: stable
+      {{- include "podinfo.selectorLabels" $ | nindent 6 }}
+      role: {{ $role }}
   endpoints:
     - port: http
       path: /metrics
       interval: 15s
+      # Stamp every series with the role of the Service it was scraped through.
+      # Without this, canary and stable series are indistinguishable once
+      # collected - same pod labels, same namespace, same job.
+      relabelings:
+        - targetLabel: role
+          replacement: {{ $role | quote }}
+{{- end }}
 {{- end }}

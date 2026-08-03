@@ -32,7 +32,24 @@
 
 analysis:
   enabled: false
+
+# ServiceMonitors for the stable and canary Services.
+#
+# ON EVERYWHERE, and it is a HARD PREREQUISITE for Continuous Verification, not
+# an optional extra: with this false there are no ServiceMonitors, Prometheus
+# holds no podinfo series at all, and a Verify step has nothing to analyse.
+#
+# kube-prometheus-stack on this cluster runs serviceMonitorSelector: {} and
+# serviceMonitorNamespaceSelector: {} - empty selectors match EVERYTHING - so a
+# ServiceMonitor in a tenant namespace is picked up with no extra labels and no
+# platform-side change. Verify that before assuming it holds elsewhere:
+#
+#   kubectl -n monitoring get prometheus -o jsonpath='{.items[*].spec.serviceMonitorSelector}'
+#
+# A non-empty selector there means tenant ServiceMonitors are ignored until they
+# carry the matching label, and the symptom is again silence, not an error.
 monitoring:
-  enabled: false
+  enabled: true
+
 ingress:
   enabled: false

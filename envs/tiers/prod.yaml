@@ -13,3 +13,23 @@ rollout:
         - setWeight: 60
         - pause: {}
         - setWeight: 100
+
+# Synthetic traffic for Continuous Verification.
+#
+# Deliberately configured on the TIER rung, not in envs/team1-prod.yaml: that
+# file is rewritten by the Harness UpdateReleaseRepo step, which re-serialises
+# the YAML and DESTROYS every comment in it. Values survive there, explanations
+# do not - so anything that needs a reason lives here.
+#
+# On because podinfo has no real users: without it CV analyses probe traffic
+# only and passes unconditionally. See chart/templates/loadgen.yaml.
+#
+# canaryPath is the failure-rehearsal switch. Flip it to /status/500, run the
+# pipeline, and only the CANARY series goes 5xx while probes stay green - the
+# verification gate is exercised in isolation from the rollout health gate.
+# PUT IT BACK to / afterwards: a permanently failing canary trains everyone to
+# approve through the gate, which is worse than not having one.
+loadgen:
+  enabled: true
+  stablePath: /
+  canaryPath: /

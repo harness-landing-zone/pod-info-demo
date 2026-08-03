@@ -33,6 +33,9 @@ spec:
             - ./podinfo
             - --port=9898
             - --level=info
+            {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports:
             - name: http
               containerPort: 9898

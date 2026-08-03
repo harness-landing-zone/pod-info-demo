@@ -1,0 +1,77 @@
+{{- if .Values.loadgen.enabled }}
+{{- /*
+TRAFFIC IS A PREREQUISITE FOR VERIFICATION, not a nice-to-have.
+
+Without this, podinfo receives only kubelet probes. http_requests_total then
+carries almost nothing, Continuous Verification analyses noise, and the gate
+PASSES EVERY TIME - which is strictly worse than having no gate, because it
+looks like protection.
+
+WHY IT HITS BOTH SERVICES. Canary CV compares the new pods against the stable
+ones, so both sides need series. During a rollout Argo Rollouts injects
+`rollouts-pod-template-hash` into each Service's selector:
+
+    podinfo         -> stable pods
+    podinfo-canary  -> canary pods
+
+so hitting the two Services is what produces two comparable populations. Hitting
+only the stable Service leaves the canary side empty and CV has nothing to
+compare - silently.
+
+FAILURE REHEARSAL. Set canaryPath to /status/500: podinfo returns that status on
+demand, so 5xx rises on the CANARY SERIES ONLY, the canary pod stays Ready, and
+the health probes are untouched. That isolates the verification gate from the
+rollout's own health gate, which is the whole point of rehearsing it.
+
+Do NOT reach for --random-error via extraArgs for this. It randomises EVERY
+route including /healthz and /readyz, so with failureThreshold 3 the canary
+CrashLoops before CV reaches a verdict - it exercises Kubernetes' health gate,
+not Harness's verification gate. Verified, not assumed: 30 requests to /healthz
+under --random-error returned 409, 400 and 500 among the 200s.
+
+Demo-tier component. It is deliberately tiny, has no probes of its own, and
+should stay off in any environment where real traffic already exists.
+*/}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "podinfo.fullname" . }}-loadgen
+  labels:
+    {{- include "podinfo.labels" . | nindent 4 }}
+    component: loadgen
+spec:
+  replicas: {{ .Values.loadgen.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "podinfo.selectorLabels" . | nindent 6 }}
+      component: loadgen
+  template:
+    metadata:
+      labels:
+        {{- include "podinfo.selectorLabels" . | nindent 8 }}
+        component: loadgen
+    spec:
+      containers:
+        - name: loadgen
+          image: {{ .Values.loadgen.image | quote }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              STABLE="http://{{ .Values.service.stableName }}:{{ .Values.service.port }}{{ .Values.loadgen.stablePath }}"
+              CANARY="http://{{ .Values.service.canaryName }}:{{ .Values.service.port }}{{ .Values.loadgen.canaryPath }}"
+              echo "loadgen -> stable=$STABLE canary=$CANARY interval={{ .Values.loadgen.intervalSeconds }}s"
+              while true; do
+                wget -q -T 3 -O /dev/null "$STABLE" 2>/dev/null || true
+              {{- if eq .Values.workload.kind "Rollout" }}
+                # The canary Service exists only for the Rollout workload. It has
+                # no endpoints outside a rollout, so failures here are expected
+                # and must not kill the loop.
+                wget -q -T 3 -O /dev/null "$CANARY" 2>/dev/null || true
+              {{- end }}
+                sleep {{ .Values.loadgen.intervalSeconds }}
+              done
+          resources:
+            {{- toYaml .Values.loadgen.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+{{- end }}
