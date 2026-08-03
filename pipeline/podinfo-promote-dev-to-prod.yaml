@@ -1,40 +1,3 @@
-# THE RECOMMENDED SHAPE - one pipeline, one image tag, promoted Dev -> Approval
-# -> Prod. This is the pattern Harness's own worked example uses
-# (argo-rollouts-with-cv.md:463-1184: Dev_Deploy -> QA_Deploy -> Approval ->
-# Prod_Deploy -> Approval -> Preprod, all in ONE pipeline).
-#
-# The two single-purpose pipelines next to this file still exist and are still
-# useful - podinfo-dev-sync.yaml demos a plain rolling update in isolation, and
-# podinfo-prod-canary.yaml demos the Argo Rollouts canary in isolation. THIS one
-# is what you would actually run, because it guarantees the artifact that
-# reaches prod is the one that was validated in dev: a single pipeline variable
-# feeds both stages, so the two cannot drift.
-#
-# WHY NOT AN ENVIRONMENT GROUP. Environment Groups look like the right tool and
-# are not: create-environment-groups.md:89 - "Harness will loop through each
-# environment in the environment group and deploy". That is parallel fan-out
-# across same-tier environments, not a gated promotion with different behaviour
-# per environment. Dev here is a plain sync; Prod is a gated canary. They must
-# be separate stages.
-#
-# WHY THE STAGES DIFFER. workload.kind is a TIER property:
-# envs/tiers/nonprod.yaml renders a Deployment (Kubernetes rolling update, no
-# Rollout object exists), envs/tiers/prod.yaml renders a Rollout with the canary
-# ladder. So the Dev stage has no GitOpsRollout steps and cannot - there is
-# nothing for them to act on.
-#
-# CHANGE FREEZE DOES NOT APPLY HERE. deployment-freeze.md:11, verbatim:
-# "Deployment freeze does not apply to Harness GitOps PR pipelines." Do not rely
-# on a Production freeze window to hold this pipeline. Use ArgoCD Sync Windows
-# on AppProject team1, or an OPA policy on the GitOps Application.
-#
-# FEATURE FLAG: GitOpsRollout requires CDS_GITOPS_ENABLE_ROLLOUTS_PIPELINE_UX on
-# the account (managing-rollouts-in-harness-pipelines.md:223-225).
-#
-# NOTE ON INLINE vs REMOTE: this file is the readable source of truth, but the
-# live entity in Harness is INLINE. The two can drift - keep them in step by
-# hand, or move the pipeline to a remote (Git Experience) store using the
-# account-level `generic` connector, which already points at this repo.
 pipeline:
   name: Podinfo Promote Dev to Prod
   identifier: podinfo_promote_dev_to_prod
@@ -48,15 +11,12 @@ pipeline:
     tenant: team1
     pattern: promotion
   variables:
-    # ONE variable, both stages. This is the whole point of the combined
-    # pipeline: prod cannot receive a tag that dev did not run.
     - name: image_tag
       type: String
       description: Image tag to promote from team1-dev through to team1-prod.
       required: true
       value: <+input>
   stages:
-    # ---------------------------------------------------------------- DEV ----
     - stage:
         name: Dev
         identifier: dev
@@ -95,21 +55,11 @@ pipeline:
                     deleteSourceBranch: true
                     mergeStrategy: merge
               - step:
-                  type: GitOpsFetchLinkedApps
-                  name: Fetch Linked Apps
-                  identifier: fetchLinkedApps
-                  timeout: 10m
-                  spec:
-                    filterByServiceEnvCluster: true
-              - step:
                   type: GitOpsSync
                   name: Sync Dev
                   identifier: gitopsSync
                   timeout: 10m
                   spec:
-                    # TRUE here, unlike prod: a Deployment reaches Healthy on
-                    # its own, so waiting is a real gate on dev succeeding
-                    # before the promotion approval is even offered.
                     waitTillHealthy: true
                     prune: false
                     dryRun: false
@@ -125,7 +75,7 @@ pipeline:
                       replaceResources: false
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
-                      serverSideApply: false
+                      serverSideApply: true
                     failOnTimeout: true
                     applicationsList:
                       - applicationName: podinfo-team1-dev
@@ -167,7 +117,7 @@ pipeline:
                       replaceResources: false
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
-                      serverSideApply: false
+                      serverSideApply: true
                     applicationsList:
                       - applicationName: podinfo-team1-dev
                         agentId: team1_argo_agent
@@ -177,9 +127,6 @@ pipeline:
                 - AllErrors
               action:
                 type: StageRollback
-    # ----------------------------------------------------------- APPROVAL ----
-    # Its own stage, between deploys - adding-harness-approval-stages.md:13
-    # ("Approvals are added in between Stages") and :27-28 (never in parallel).
     - stage:
         name: Approve Prod
         identifier: approve_prod
@@ -205,7 +152,6 @@ pipeline:
                       userGroups:
                         - account._account_all_users
                     approverInputs: []
-    # --------------------------------------------------------------- PROD ----
     - stage:
         name: Prod Canary
         identifier: prod_canary
@@ -232,7 +178,6 @@ pipeline:
                     variables:
                       - name: image.tag
                         type: String
-                        # The SAME pipeline variable dev used.
                         value: <+pipeline.variables.image_tag>
                     prTitle: "podinfo team1-prod -> <+pipeline.variables.image_tag>"
                     allowEmptyCommit: true
@@ -245,20 +190,11 @@ pipeline:
                     deleteSourceBranch: true
                     mergeStrategy: merge
               - step:
-                  type: GitOpsFetchLinkedApps
-                  name: Fetch Linked Apps
-                  identifier: fetchLinkedApps
-                  timeout: 10m
-                  spec:
-                    filterByServiceEnvCluster: true
-              - step:
                   type: GitOpsSync
                   name: Sync starts canary at 20 percent
                   identifier: gitopsSync
                   timeout: 10m
                   spec:
-                    # FALSE: a Rollout parked on an indefinite pause reports
-                    # Suspended and never reaches Healthy until promoted.
                     waitTillHealthy: false
                     prune: false
                     dryRun: false
@@ -274,16 +210,11 @@ pipeline:
                       replaceResources: false
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
-                      serverSideApply: false
+                      serverSideApply: true
                     failOnTimeout: true
                     applicationsList:
                       - applicationName: podinfo-team1-prod
                         agentId: team1_argo_agent
-                  # NO autoPromoteRolloutBehavior. Its enum is only
-                  # ["promote-full","resume"] - there is no "none" - so omitting
-                  # it is the ONLY way to let the canary stop at its first
-                  # pause. Setting promote-full drives it to 100% on sync and
-                  # every gate below becomes decorative.
               - step:
                   type: Wait
                   name: Soak at 20 Percent
@@ -299,8 +230,6 @@ pipeline:
                     appName: podinfo-team1-prod
                     agentIdentifier: team1_argo_agent
                     namespace: team1-prod
-                    # Release-name independent: the chart's fullname helper
-                    # always yields `podinfo`, in every namespace.
                     rolloutName: podinfo
                     waitUntilHealthStatus:
                       healthStatus: Suspended
@@ -325,10 +254,6 @@ pipeline:
                       healthStatus: Suspended
                     autoRolloutAction: promote-full
             rollbackSteps:
-              # abort -> revert -> sync, the order Harness's own canary example
-              # uses (argo-rollouts-with-cv.md:1012-1055). Abort returns traffic
-              # to stable immediately; reverting git alone would leave the
-              # canary parked at its current weight.
               - step:
                   type: GitOpsRollout
                   name: Abort Rollout
@@ -376,7 +301,7 @@ pipeline:
                       replaceResources: false
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
-                      serverSideApply: false
+                      serverSideApply: true
                     applicationsList:
                       - applicationName: podinfo-team1-prod
                         agentId: team1_argo_agent

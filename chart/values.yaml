@@ -67,6 +67,11 @@ podAnnotations:
   prometheus.io/path: /metrics
 podLabels: {}
 
+# Verified against the amd64 image: podinfo starts and serves HTTP under
+# readOnlyRootFilesystem AND runAsUser 10001, together and separately. It is
+# launched with `--port` and `--level` only, so the write paths behind /store
+# are never touched and a read-only root filesystem costs nothing.
+# Do NOT loosen these to chase a CrashLoop — see envs/defaults.yaml.
 securityContext:
   runAsNonRoot: true
   runAsUser: 10001
@@ -74,3 +79,11 @@ securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop: ["ALL"]
+  # Required by the `restricted` Pod Security Standard, which team1-dev and
+  # team1-prod enforce. Without it the API server admits the pod but warns:
+  #   "would violate PodSecurity restricted:latest: seccompProfile ...
+  #    must set securityContext.seccompProfile.type to RuntimeDefault"
+  # A warning, not a rejection - so this gap is silent until someone reads
+  # the apply output.
+  seccompProfile:
+    type: RuntimeDefault
