@@ -42,8 +42,18 @@ metadata:
     role: {{ $role }}
 spec:
   selector:
+    # A ServiceMonitor selector matches the SERVICE's metadata labels - NOT the
+    # pod selector. podinfo.selectorLabels is `app: podinfo`, which is what the
+    # Service's spec.selector uses to find pods; it never appears in the
+    # Service's own metadata.labels. Selecting on it matches ZERO Services and
+    # Prometheus simply never scrapes - no error, no target, empty queries.
+    # (The original template had exactly this bug; it was invisible because
+    # monitoring.enabled was false, so the manifest was never rendered.)
+    #
+    # These two ARE on the Service, via podinfo.labels:
     matchLabels:
-      {{- include "podinfo.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/name: {{ include "podinfo.name" $ }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
       role: {{ $role }}
   endpoints:
     - port: http
