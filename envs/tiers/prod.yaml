@@ -32,4 +32,19 @@ rollout:
 loadgen:
   enabled: true
   stablePath: /
-  canaryPath: /
+  # >>> FAILURE REHEARSAL ACTIVE - REVERT TO "/" AFTER THE RUN <<<
+  #
+  # podinfo returns the status code named in the path, so /status/500 makes the
+  # CANARY Service return 5xx while the stable Service stays clean. Only the
+  # canary population degrades, and the health probes hit /healthz and /readyz
+  # and are untouched - so the canary pod stays Ready and the ROLLOUT's own
+  # health gate does not fire. That isolation is the point: what fails here is
+  # the VERIFICATION gate, on its own, which is the thing we are testing.
+  #
+  # Expected: Verify at 20 Percent detects the error-rate anomaly, its
+  # failureStrategy fires StageRollback, and prod stays on the previous tag.
+  #
+  # PUT THIS BACK TO "/" once the rehearsal is done. A permanently red canary
+  # trains everyone to click through the gate, which is worse than not having
+  # one - and every subsequent promotion would roll back.
+  canaryPath: /status/500
