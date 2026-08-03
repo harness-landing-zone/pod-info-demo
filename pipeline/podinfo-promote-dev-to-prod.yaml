@@ -55,6 +55,18 @@ pipeline:
                     deleteSourceBranch: true
                     mergeStrategy: merge
               - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec:
+                    # Resolves Applications from the ApplicationSet referenced by
+                    # the service's appsetConfigs (App Set Reference), filtered to
+                    # this stage's service + environment. The appset is the source
+                    # of truth for which apps exist, so adding an environment or a
+                    # cluster to it needs no pipeline edit.
+                    filterByServiceEnvCluster: true
+              - step:
                   type: GitOpsSync
                   name: Sync Dev
                   identifier: gitopsSync
@@ -77,9 +89,6 @@ pipeline:
                       respectIgnoreDifferences: false
                       serverSideApply: true
                     failOnTimeout: true
-                    applicationsList:
-                      - applicationName: podinfo-team1-dev
-                        agentId: team1_argo_agent
             rollbackSteps:
               - step:
                   type: RevertPR
@@ -118,9 +127,6 @@ pipeline:
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
                       serverSideApply: true
-                    applicationsList:
-                      - applicationName: podinfo-team1-dev
-                        agentId: team1_argo_agent
         failureStrategies:
           - onFailure:
               errors:
@@ -190,6 +196,18 @@ pipeline:
                     deleteSourceBranch: true
                     mergeStrategy: merge
               - step:
+                  type: GitOpsFetchLinkedApps
+                  name: Fetch Linked Apps
+                  identifier: fetchLinkedApps
+                  timeout: 10m
+                  spec:
+                    # Resolves Applications from the ApplicationSet referenced by
+                    # the service's appsetConfigs (App Set Reference), filtered to
+                    # this stage's service + environment. The appset is the source
+                    # of truth for which apps exist, so adding an environment or a
+                    # cluster to it needs no pipeline edit.
+                    filterByServiceEnvCluster: true
+              - step:
                   type: GitOpsSync
                   name: Sync starts canary at 20 percent
                   identifier: gitopsSync
@@ -211,15 +229,48 @@ pipeline:
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
                       serverSideApply: true
-                    applicationsList:
-                      - applicationName: podinfo-team1-prod
-                        agentId: team1_argo_agent
               - step:
-                  type: Wait
-                  name: Soak at 20 Percent
-                  identifier: soakAt20
+                  type: Verify
+                  name: Verify at 20 Percent
+                  identifier: verifyAt20
+                  timeout: 2h
                   spec:
-                    duration: 2m
+                    isMultiServicesOrEnvs: false
+                    # Canary compares the NEW pods against the STABLE pods over the
+                    # analysis window. It needs series from BOTH, which is why the
+                    # chart emits a ServiceMonitor per Service (stable AND canary)
+                    # and why the loadgen drives traffic at both.
+                    type: Canary
+                    # Default resolves the Monitored Service from this stage's
+                    # service + environment: podinfo + team1_prod ->
+                    # podinfo_team1_prod, health source prometheus_eks.
+                    monitoredService:
+                      type: Default
+                      spec: {}
+                    spec:
+                      sensitivity: HIGH
+                      duration: 5m
+                  failureStrategies:
+                    # FAIL CLOSED, on both branches.
+                    #
+                    # Verification = CV saw an anomaly. Roll the stage back rather
+                    # than advancing the canary to more users.
+                    #
+                    # Unknown = CV could not reach a verdict (no data, Prometheus
+                    # unreachable, query returned nothing). That is NOT a pass. A
+                    # gate that promotes when it cannot see is worse than no gate,
+                    # because it reads as protection. Treat it the same as a
+                    # failure and make someone look.
+                    - onFailure:
+                        errors:
+                          - Verification
+                        action:
+                          type: StageRollback
+                    - onFailure:
+                        errors:
+                          - Unknown
+                        action:
+                          type: StageRollback
               - step:
                   type: GitOpsRollout
                   name: Promote to 60 Percent
@@ -234,11 +285,47 @@ pipeline:
                       healthStatus: Suspended
                     autoRolloutAction: resume
               - step:
-                  type: Wait
-                  name: Soak at 60 Percent
-                  identifier: soakAt60
+                  type: Verify
+                  name: Verify at 60 Percent
+                  identifier: verifyAt60
+                  timeout: 2h
                   spec:
-                    duration: 2m
+                    isMultiServicesOrEnvs: false
+                    # Canary compares the NEW pods against the STABLE pods over the
+                    # analysis window. It needs series from BOTH, which is why the
+                    # chart emits a ServiceMonitor per Service (stable AND canary)
+                    # and why the loadgen drives traffic at both.
+                    type: Canary
+                    # Default resolves the Monitored Service from this stage's
+                    # service + environment: podinfo + team1_prod ->
+                    # podinfo_team1_prod, health source prometheus_eks.
+                    monitoredService:
+                      type: Default
+                      spec: {}
+                    spec:
+                      sensitivity: HIGH
+                      duration: 5m
+                  failureStrategies:
+                    # FAIL CLOSED, on both branches.
+                    #
+                    # Verification = CV saw an anomaly. Roll the stage back rather
+                    # than advancing the canary to more users.
+                    #
+                    # Unknown = CV could not reach a verdict (no data, Prometheus
+                    # unreachable, query returned nothing). That is NOT a pass. A
+                    # gate that promotes when it cannot see is worse than no gate,
+                    # because it reads as protection. Treat it the same as a
+                    # failure and make someone look.
+                    - onFailure:
+                        errors:
+                          - Verification
+                        action:
+                          type: StageRollback
+                    - onFailure:
+                        errors:
+                          - Unknown
+                        action:
+                          type: StageRollback
               - step:
                   type: GitOpsRollout
                   name: Promote to 100 Percent
@@ -301,9 +388,6 @@ pipeline:
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
                       serverSideApply: true
-                    applicationsList:
-                      - applicationName: podinfo-team1-prod
-                        agentId: team1_argo_agent
         failureStrategies:
           - onFailure:
               errors:
