@@ -211,7 +211,6 @@ pipeline:
                       prunePropagationPolicy: foreground
                       respectIgnoreDifferences: false
                       serverSideApply: true
-                    failOnTimeout: true
                     applicationsList:
                       - applicationName: podinfo-team1-prod
                         agentId: team1_argo_agent
