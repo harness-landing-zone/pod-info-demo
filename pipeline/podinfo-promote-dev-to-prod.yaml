@@ -250,6 +250,17 @@ pipeline:
                     spec:
                       sensitivity: HIGH
                       duration: 5m
+                    # FAIL WHEN THERE IS NOTHING TO ANALYSE. Default is false,
+                    # and false means a Verify step with ZERO collected data
+                    # returns VERIFICATION_PASSED / HEALTHY - a green gate over
+                    # an unexamined canary.
+                    #
+                    # Observed, not theorised: a canary serving ~1.0 5xx/s was
+                    # passed because every host came back NO_ANALYSIS. The
+                    # failureStrategies below could not catch it - Harness never
+                    # reports Unknown in that case, it reports success. This
+                    # setting is the only thing that closes it.
+                    failOnNoAnalysis: true
                   failureStrategies:
                     # FAIL CLOSED, on both branches.
                     #
@@ -305,6 +316,17 @@ pipeline:
                     spec:
                       sensitivity: HIGH
                       duration: 5m
+                    # FAIL WHEN THERE IS NOTHING TO ANALYSE. Default is false,
+                    # and false means a Verify step with ZERO collected data
+                    # returns VERIFICATION_PASSED / HEALTHY - a green gate over
+                    # an unexamined canary.
+                    #
+                    # Observed, not theorised: a canary serving ~1.0 5xx/s was
+                    # passed because every host came back NO_ANALYSIS. The
+                    # failureStrategies below could not catch it - Harness never
+                    # reports Unknown in that case, it reports success. This
+                    # setting is the only thing that closes it.
+                    failOnNoAnalysis: true
                   failureStrategies:
                     # FAIL CLOSED, on both branches.
                     #
