@@ -63,7 +63,18 @@ spec:
       # Without this, canary and stable series are indistinguishable once
       # collected - same pod labels, same namespace, same job.
       relabelings:
-        - targetLabel: role
+        # `action: replace` is the Prometheus Operator's DEFAULT and must still
+        # be written explicitly. Omit it and the operator injects it, so the live
+        # object carries a field git never declared and the ServiceMonitor sits
+        # OutOfSync forever - on an otherwise Healthy app, with a one-field diff
+        # that is easy to dismiss as noise.
+        #
+        # Argo normalises away server-side defaults for BUILT-IN kinds; it cannot
+        # for a CRD, and less so here because this app runs with
+        # ServerSideDiff=false (see charts/appsets). The general rule: when a CRD
+        # defaults a field, declare the default yourself.
+        - action: replace
+          targetLabel: role
           replacement: {{ $role | quote }}
 {{- end }}
 {{- end }}
