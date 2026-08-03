@@ -40,6 +40,34 @@ spec:
   template:
     metadata:
       name: '{{ .Values.appName }}-{{`{{ .env }}`}}'
+      annotations:
+        {{- /* REQUIRED once this app contains ANY CRD-typed resource.
+
+        The Application syncs with ServerSideApply=true. Argo's server-side diff
+        uses Kubernetes' structured-merge-diff, which is schema-aware, and it
+        could not resolve a type for our ServiceMonitors:
+
+          ComparisonError: ... error calculating structured merge diff:
+          unable to resolve parseableType for GroupVersionKind:
+          monitoring.coreos.com/v1, Kind=ServiceMonitor
+
+        The failure mode is CONFUSING because it contradicts itself: the sync
+        SUCCEEDS ("phase=Succeeded, successfully synced" - server-side apply runs
+        in the API server, which knows its own CRDs) while the Application reports
+        sync=Unknown. Only Argo's client-side PREDICTION of the diff breaks, so
+        you lose drift detection while deployments keep working.
+
+        NOT an RBAC problem, and specifically NOT a consequence of this tenant
+        holding zero ClusterRoles. CRD schemas come from /openapi/v2 and
+        /openapi/v3, which system:discovery grants to system:authenticated - every
+        ServiceAccount can already read them. Verified with `auth can-i get
+        /openapi/v2`. Do not "fix" this by granting the tenant a cluster-scoped
+        read; it buys nothing and cracks the wall for no reason.
+
+        Falls back to client-side diffing. Server-side APPLY is unaffected, so the
+        field-ownership behaviour we rely on (removing a key from git actually
+        removes it from the cluster) still holds. */}}
+        argocd.argoproj.io/compare-options: ServerSideDiff=false
       labels:
         {{- /* These two MUST be the Harness service and environment
         IDENTIFIERS (podinfo, team1_dev / team1_prod), not display names. They
