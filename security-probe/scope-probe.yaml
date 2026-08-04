@@ -1,0 +1,39 @@
+# THROWAWAY SECURITY PROBE — delete once the question is answered.
+#
+# QUESTION: can a PROJECT-scoped Harness GitOps agent (team1_argo_agent, in
+# gitopsdemo/selfmanagedargo) resolve an ORG-scoped Harness secret?
+#
+# Harness documents the `org.` modifier as a first-class way for a project
+# context to reference an organization secret
+# (platform/secrets/add-use-text-secrets.md). If the tenant's CMP resolves it,
+# then a tenant can read ANY org secret by committing an expression to its own
+# repo — with no Harness login, no org role assignment, and no UI access —
+# because the plugin resolves with the AGENT's identity, not the user's.
+#
+# This lives in pod-info-demo because team1's AppProject sourceRepos permits
+# only this repo and argocd-example-apps. That restriction is itself Wall 3
+# working as intended.
+#
+# The referenced secret (org.Jira_Connector) is a REVOKED Jira token — chosen
+# so that a positive result leaks nothing of value.
+#
+# READING THE RESULT WITHOUT READING THE SECRET:
+#   resolved   -> org_scope_probe differs from the literal expression string
+#   unresolved -> it still IS the literal string (plugin passed it through)
+#   errored    -> the Application fails to sync; no Secret is created
+# Compare, never print.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hga-scope-probe
+  namespace: team1-dev
+  labels:
+    app.kubernetes.io/part-of: hga-security-probe
+type: Opaque
+stringData:
+  # The control. Proves the CMP ran at all and that plain values pass through
+  # untouched — distinguishes "plugin did nothing" from "plugin resolved nothing".
+  marker: static-control-value
+  # The actual test.
+  org_scope_probe: <+secrets.getValue("org.Jira_Connector")>

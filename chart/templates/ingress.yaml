@@ -21,7 +21,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ .Values.service.stableName }}
+                name: {{ include "podinfo.stableServiceName" . }}
                 port:
                   number: {{ .Values.service.port }}
 {{- end }}

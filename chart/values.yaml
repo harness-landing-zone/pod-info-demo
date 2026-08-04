@@ -55,11 +55,24 @@ loadgen:
       cpu: 50m
       memory: 32Mi
 
+# MULTI-SERVICE NOTE. Two releases of this chart can share a namespace (e.g. a
+# team running `podinfo` and `frontend`), but ONLY if they differ in name.
+# Setting `nameOverride` is enough: it flows into podinfo.name -> fullname and
+# into selectorLabels (`app: <name>`), so resource names AND pod selectors both
+# separate. Leave it unset and the second release's Service selects the first
+# release's pods - traffic silently crosses services with nothing erroring.
+#
+# nameOverride: frontend
+nameOverride: ""
+
 service:
   port: 9898
   targetPort: 9898
-  stableName: podinfo
-  canaryName: podinfo-canary
+  # Empty = derive from the release name, which is what keeps a second release
+  # from creating a Service with the same name as the first. Override only if
+  # something external depends on a fixed Service name.
+  stableName: ""
+  canaryName: ""
 
 rollout:
   strategy:

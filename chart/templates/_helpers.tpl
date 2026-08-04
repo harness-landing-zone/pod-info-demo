@@ -26,3 +26,20 @@ helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version }}
 {{- define "podinfo.selectorLabels" -}}
 app: {{ include "podinfo.name" . }}
 {{- end -}}
+
+{{/*
+Service names, derived from fullname unless explicitly pinned.
+
+Two releases of this chart in ONE namespace (podinfo + frontend, say) must not
+both create a Service called "podinfo". Deriving from fullname means a second
+release needs only `nameOverride` - nothing else to keep in sync. Argo Rollouts
+also rewrites these Services' selectors during a canary, so a collision here
+would hand one service's traffic to the other's pods with nothing erroring.
+*/}}
+{{- define "podinfo.stableServiceName" -}}
+{{- default (include "podinfo.fullname" .) .Values.service.stableName -}}
+{{- end -}}
+
+{{- define "podinfo.canaryServiceName" -}}
+{{- default (printf "%s-canary" (include "podinfo.fullname" .)) .Values.service.canaryName -}}
+{{- end -}}

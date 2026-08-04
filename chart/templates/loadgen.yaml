@@ -57,8 +57,8 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              STABLE="http://{{ .Values.service.stableName }}:{{ .Values.service.port }}{{ .Values.loadgen.stablePath }}"
-              CANARY="http://{{ .Values.service.canaryName }}:{{ .Values.service.port }}{{ .Values.loadgen.canaryPath }}"
+              STABLE="http://{{ include "podinfo.stableServiceName" . }}:{{ .Values.service.port }}{{ .Values.loadgen.stablePath }}"
+              CANARY="http://{{ include "podinfo.canaryServiceName" . }}:{{ .Values.service.port }}{{ .Values.loadgen.canaryPath }}"
               echo "loadgen -> stable=$STABLE canary=$CANARY interval={{ .Values.loadgen.intervalSeconds }}s"
               while true; do
                 wget -q -T 3 -O /dev/null "$STABLE" 2>/dev/null || true

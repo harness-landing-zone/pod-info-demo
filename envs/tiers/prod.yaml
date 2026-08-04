@@ -32,19 +32,21 @@ rollout:
 loadgen:
   enabled: true
   stablePath: /
-  # >>> FAILURE REHEARSAL ACTIVE - REVERT TO "/" AFTER THE RUN <<<
+  # REHEARSAL SWITCH - normally "/". Set to /status/500 to prove the gate still
+  # works, then PUT IT BACK. A permanently red canary trains everyone to click
+  # through the gate, and every promotion after it would roll back.
   #
-  # podinfo returns the status code named in the path, so /status/500 makes the
-  # CANARY Service return 5xx while the stable Service stays clean. Only the
-  # canary population degrades, and the health probes hit /healthz and /readyz
-  # and are untouched - so the canary pod stays Ready and the ROLLOUT's own
-  # health gate does not fire. That isolation is the point: what fails here is
-  # the VERIFICATION gate, on its own, which is the thing we are testing.
+  # Rehearsed 2026-08-03 and it worked end to end: canary served ~0.99 5xx/s
+  # against a clean stable baseline, Verify at 20 Percent scored the canary host
+  # UNHEALTHY (1 anomalous metric) and failed, and StageRollback ran Abort
+  # Rollout -> Revert PR -> Merge Revert PR -> Sync Rollback. Prod stayed on the
+  # good tag and the bad version never left 20%.
   #
-  # Expected: Verify at 20 Percent detects the error-rate anomaly, its
-  # failureStrategy fires StageRollback, and prod stays on the previous tag.
-  #
-  # PUT THIS BACK TO "/" once the rehearsal is done. A permanently red canary
-  # trains everyone to click through the gate, which is worse than not having
-  # one - and every subsequent promotion would roll back.
-  canaryPath: /status/500
+  # START FROM A FULLY-PROMOTED ROLLOUT. With no canary in flight the
+  # podinfo-canary Service resolves to the STABLE pods, so this path poisons the
+  # stable baseline instead of the canary's - canary and stable then look
+  # equally bad and CV correctly finds no anomaly. Check first:
+  #   kubectl -n team1-prod get rollout podinfo \
+  #     -o jsonpath='{.status.stableRS} {.status.currentPodHash}'
+  # The two must be equal before you start.
+  canaryPath: /
